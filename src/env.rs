@@ -4,22 +4,21 @@ use std::process::Command;
 use colored::*;
 
 /// Configuration for the env command
-#[derive(Debug, Default)]]
+#[derive(Debug, Default)]
 struct EnvConfig {
     ignore_environment: bool,
     unset_vars: Vec<String>,
     set_vars: HashMap<String, String>,
     null_terminate: bool,
-    command_args: Vec<String>
+    command_args: Vec<String>,
 }
 
 /// Result type for env operations
 type EnvResult<T> = Result<T, String>;
 
-/// Execute the env with given parameters
+/// Execute the env command with given arguments
 pub fn execute(args: &[String]) {
     if args.is_empty() {
-        // Display all environment variables if no parameters are passed
         display_environment_variables();
         return;
     }
@@ -34,7 +33,7 @@ pub fn execute(args: &[String]) {
         }
         Err(e) => {
             eprintln!("{}", e.red());
-            std::process:exit(1);
+            std::process::exit(1);
         }
     }
 }
@@ -46,14 +45,14 @@ fn parse_arguments(args: &[String]) -> EnvResult<EnvConfig> {
 
     while i < args.len() {
         let arg = &args[i];
-
+        
         match arg.as_str() {
-            "-i" | "--ignore_environment" => {
+            "-i" | "--ignore-environment" => {
                 config.ignore_environment = true;
                 i += 1;
             }
             "-u" | "--unset" => {
-                if i+1 < args.len() {
+                if i + 1 < args.len() {
                     config.unset_vars.push(args[i + 1].clone());
                     i += 2;
                 } else {
@@ -78,7 +77,7 @@ fn parse_arguments(args: &[String]) -> EnvResult<EnvConfig> {
             _ => {
                 // Check if it's a variable assignment or command
                 if arg.contains('=') && config.command_args.is_empty() {
-                    parse_variable_assignment(arg, &mut config.set)?;
+                    parse_variable_assignment(arg, &mut config.set_vars)?;
                     i += 1;
                 } else {
                     // Rest are command arguments
@@ -89,20 +88,21 @@ fn parse_arguments(args: &[String]) -> EnvResult<EnvConfig> {
         }
     }
 
-    Ok(config);
+    Ok(config)
 }
 
 /// Parse a variable assignment (KEY=VALUE)
-fn parse_variable_assignment(arg: &str, set_vars: &mut HashMap<String, String>) -> EnvResult() {
+fn parse_variable_assignment(arg: &str, set_vars: &mut HashMap<String, String>) -> EnvResult<()> {
     let parts: Vec<&str> = arg.splitn(2, '=').collect();
     if parts.len() == 2 {
         let key = parts[0];
         let value = parts[1];
-
+        
+        // Validate variable name
         if !is_valid_var_name(key) {
             return Err(format!("env: invalid variable name: '{}'", key));
         }
-
+        
         set_vars.insert(key.to_string(), value.to_string());
         Ok(())
     } else {
@@ -115,12 +115,12 @@ fn is_valid_var_name(name: &str) -> bool {
     if name.is_empty() {
         return false;
     }
-
-    // Variable names should start with letters or underscore
-    // and contain only letters, numbers, and underscore
-    name.chars().enumerate().all(|i, c| {
+    
+    // Variable names should start with letter or underscore
+    // and contain only letters, numbers, and underscores
+    name.chars().enumerate().all(|(i, c)| {
         if i == 0 {
-            c.is_ascii_alphabet() || c == '_'
+            c.is_ascii_alphabetic() || c == '_'
         } else {
             c.is_ascii_alphanumeric() || c == '_'
         }
@@ -133,6 +133,7 @@ fn display_environment_variables() {
     print_env_vars(&env_vars, false);
 }
 
+/// Get sorted environment variables
 fn get_sorted_env_vars() -> Vec<(String, String)> {
     let mut env_vars: Vec<_> = env::vars().collect();
     env_vars.sort_by(|a, b| a.0.cmp(&b.0));
@@ -171,7 +172,6 @@ fn build_modified_environment(config: &EnvConfig) -> HashMap<String, String> {
     env_vars
 }
 
-/// Helper funtion for printing environment variables
 fn print_env_vars(vars: &[(String, String)], null_terminate: bool) {
     for (key, value) in vars {
         if null_terminate {
@@ -256,7 +256,7 @@ fn show_help() {
     println!("    env -i NEW_VAR=value cmd    Run cmd with only NEW_VAR set");
 }
 
-/// Get environment variables for TUI Display
+/// Get environment variables for TUI display
 pub fn get_env_for_tui() -> Vec<(String, String)> {
     get_sorted_env_vars()
 }
@@ -266,7 +266,7 @@ pub fn get_env_var(name: &str) -> Option<String> {
     env::var(name).ok()
 }
 
-/// Set environment variable (for TUI integration)
+/// Set environment variable (for TUI interaction)
 pub fn set_env_var(name: &str, value: &str) -> Result<(), String> {
     if !is_valid_var_name(name) {
         return Err(format!("Invalid variable name: {}", name));
@@ -275,7 +275,7 @@ pub fn set_env_var(name: &str, value: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Remove environment variable (for TUI integration)
+/// Remove environment variable (for TUI interaction)
 pub fn remove_env_var(name: &str) -> Result<(), String> {
     if !is_valid_var_name(name) {
         return Err(format!("Invalid variable name: {}", name));
