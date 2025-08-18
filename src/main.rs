@@ -1,7 +1,7 @@
 use colored::Colorize;
 use rm::rm;
 use rustyline::error::ReadlineError;
-use std::env;
+use std::env as std_env;
 use std::fs;
 use std::io::{self};
 use winix::{echo, touch};
@@ -14,6 +14,7 @@ mod chmod;
 mod chown;
 mod df;
 mod disown;
+mod env;
 mod free;
 mod git;
 mod input;
@@ -29,7 +30,7 @@ mod uname;
 mod uptime;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let args: Vec<String> = std_env::args().collect();
     if args.contains(&"--interactive".to_string()) {
         git::interactive_mode();
     }
@@ -182,6 +183,9 @@ fn handle_command(line: &str) {
                 }
             }
         }
+        "env" => {
+            env::execute(&args);
+        }
         "git" => {
             let git_args = &["status"]; // Replace with real input
             git::execute(git_args);
@@ -238,11 +242,12 @@ fn show_splash_screen() {
     println!();
     println!("{}", "Available Commands:".bold().white());
     println!(
-        "  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}",
+        "  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}",
         "cd".bold().yellow(),
         "chmod".bold().yellow(),
         "chown".bold().yellow(),
         "df".bold().yellow(),
+        "env".bold().yellow(),
         "exit".bold().red(),
         "free".bold().yellow(),
         "git".bold().yellow(),
@@ -260,11 +265,11 @@ fn show_splash_screen() {
 
 // Utility commands
 fn cd_command(path: &str) -> io::Result<()> {
-    env::set_current_dir(path)
+    std_env::set_current_dir(path)
 }
 
 fn pwd_command() -> io::Result<()> {
-    let cwd = env::current_dir()?;
+    let cwd = std_env::current_dir()?;
     println!("{}", cwd.display().to_string().bold().cyan());
     Ok(())
 }

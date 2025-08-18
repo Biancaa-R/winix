@@ -45,7 +45,7 @@ fn parse_arguments(args: &[String]) -> EnvResult<EnvConfig> {
 
     while i < args.len() {
         let arg = &args[i];
-        
+
         match arg.as_str() {
             "-i" | "--ignore-environment" => {
                 config.ignore_environment = true;
@@ -97,12 +97,12 @@ fn parse_variable_assignment(arg: &str, set_vars: &mut HashMap<String, String>) 
     if parts.len() == 2 {
         let key = parts[0];
         let value = parts[1];
-        
+
         // Validate variable name
         if !is_valid_var_name(key) {
             return Err(format!("env: invalid variable name: '{}'", key));
         }
-        
+
         set_vars.insert(key.to_string(), value.to_string());
         Ok(())
     } else {
@@ -115,7 +115,7 @@ fn is_valid_var_name(name: &str) -> bool {
     if name.is_empty() {
         return false;
     }
-    
+
     // Variable names should start with letter or underscore
     // and contain only letters, numbers, and underscores
     name.chars().enumerate().all(|(i, c)| {
@@ -256,30 +256,168 @@ fn show_help() {
     println!("    env -i NEW_VAR=value cmd    Run cmd with only NEW_VAR set");
 }
 
+#[allow(dead_code)]
 /// Get environment variables for TUI display
 pub fn get_env_for_tui() -> Vec<(String, String)> {
     get_sorted_env_vars()
 }
 
+#[allow(dead_code)]
 /// Get a specific environment variable
 pub fn get_env_var(name: &str) -> Option<String> {
     env::var(name).ok()
 }
 
+#[allow(dead_code)]
 /// Set environment variable (for TUI interaction)
 pub fn set_env_var(name: &str, value: &str) -> Result<(), String> {
     if !is_valid_var_name(name) {
         return Err(format!("Invalid variable name: {}", name));
     }
-    env::set_var(name, value);
+    unsafe {
+        env::set_var(name, value);
+    }
     Ok(())
 }
 
+#[allow(dead_code)]
 /// Remove environment variable (for TUI interaction)
 pub fn remove_env_var(name: &str) -> Result<(), String> {
     if !is_valid_var_name(name) {
         return Err(format!("Invalid variable name: {}", name));
     }
-    env::remove_var(name);
+    unsafe {
+        env::remove_var(name);
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_variable_assignment() {
+        let mut vars = HashMap::new();
+
+        // Valid assignments
+        assert!(parse_variable_assignment("TEST_VAR=value", &mut vars).is_ok());
+        assert_eq!(vars.get("TEST_VAR"), Some(&"value".to_string()));
+
+        assert!(parse_variable_assignment("EMPTY=", &mut vars).is_ok());
+        assert_eq!(vars.get("EMPTY"), Some(&"".to_string()));
+
+        assert!(parse_variable_assignment("WITH_EQUALS=a=b=c", &mut vars).is_ok());
+        assert_eq!(vars.get("WITH_EQUALS"), Some(&"a=b=c".to_string()));
+
+        // Invalid assignments
+        assert!(parse_variable_assignment("", &mut vars).is_err());
+        assert!(parse_variable_assignment("NO_EQUALS", &mut vars).is_err());
+        assert!(parse_variable_assignment("123_INVALID=value", &mut vars).is_err());
+    }
+
+    #[test]
+    fn test_is_valid_var_name() {
+        // Valid name
+        assert!(is_valid_var_name("PATH"));
+        assert!(is_valid_var_name("_underscore"));
+        assert!(is_valid_var_name("VAR_123"));
+        assert!(is_valid_var_name("a"));
+
+        // Invalid name
+        assert!(!is_valid_var_name(""));
+        assert!(!is_valid_var_name("123_start"));
+        assert!(!is_valid_var_name("var-with-dash"));
+        assert!(!is_valid_var_name("var.with.dot"));
+        assert!(!is_valid_var_name("var with space"));
+    }
+
+    #[test]
+    fn test_parse_arguments() {
+        // Test ignore environment
+        let args = vec!["-i".to_string()];
+        let config = parse_arguments(&args).unwrap();
+        assert!(config.ignore_environment);
+
+        // Test unset
+        let args = vec!["-u".to_string(), "PATH".to_string()];
+        let config = parse_arguments(&args).unwrap();
+        assert_eq!(config.unset_vars, vec!["PATH"]);
+
+        // Test null terminate
+        let args = vec!["-0".to_string()];
+        let config = parse_arguments(&args).unwrap();
+        assert!(config.null_terminate);
+
+        // Test variable assignment
+        let args = vec!["VAR=value".to_string()];
+        let config = parse_arguments(&args).unwrap();
+        assert_eq!(config.set_vars.get("VAR"), Some(&"value".to_string()));
+
+        // Test command
+        let args = vec!["VAR=value".to_string(), "echo".to_string(), "test".to_string()];
+        let config = parse_arguments(&args).unwrap();
+        assert_eq!(config.command_args, vec!["echo", "test"]);
+
+        // Test combined
+        let args = vec![
+            "-i".to_string(),
+            "-u".to_string(),
+            "OLD".to_string(),
+            "NEW=value".to_string(),
+            "cmd".to_string(),
+        ];
+
+        let config = parse_arguments(&args).unwrap();
+        assert!(config.ignore_environment);
+        assert_eq!(config.unset_vars, vec!["OLD"]);
+        assert_eq!(config.set_vars.get("NEW"), Some(&"value".to_string()));
+        assert_eq!(config.command_args, vec!["cmd"]);
+    }
+
+    #[test]
+    fn test_build_modified_environment() {
+        let mut config = EnvConfig::default();
+        config.set_vars.insert("TEST_VAR".to_string(), "test_value".to_string());
+
+        let env = build_modified_environment(&config);
+        assert_eq!(env.get("TEST_VAR"), Some(&"test_value".to_string()));
+
+        // Test with ignore environment
+        config.ignore_environment = true;
+        let env = build_modified_environment(&config);
+        assert_eq!(env.len(), 1);
+        assert_eq!(env.get("TEST_VAR"), Some(&"test_value".to_string()));
+    }
+
+    #[test]
+    fn test_environment_operations() {
+        let test_var = "WINIX_TEST_VAR";
+        let test_value = "test_value";
+
+        // Test set
+        assert!(set_env_var(test_var, test_value).is_ok());
+        assert_eq!(get_env_var(test_var), Some(test_value.to_string()));
+
+        // Test remove
+        assert!(remove_env_var(test_var).is_ok());
+        assert_eq!(get_env_var(test_var), None);
+
+        // Test invalid names
+        assert!(set_env_var("123invalid", "value").is_err());
+        assert!(remove_env_var("invalid-name").is_err());
+    }
+
+    #[test]
+    fn test_get_sorted_env_vars() {
+        let vars = get_sorted_env_vars();
+
+        // Check that it's sorted
+        for window in vars.windows(2) {
+            assert!(window[0].0 <= window[1].0);
+        }
+
+        // Check that it contains at least PATH (should exist on all systems)
+        assert!(vars.iter().any(|(k, _)| k == "PATH" || k == "Path"));
+    }
 }
