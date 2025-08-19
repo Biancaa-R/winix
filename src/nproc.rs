@@ -317,3 +317,56 @@ fn show_help() {
     println!("    cargo build --jobs $(nproc --ignore=2)  Leave 2 CPUs free");
     println!("    parallel -j$(nproc) command ::: files   GNU parallel with all CPUs");
 }
+
+/// Get processor count for TUI display with additional info
+pub fn get_cpu_info_for_tui() -> String {
+    let info = get_cpu_info();
+    format!(
+        "Available: {} | Total: {} | Online: {}",
+        info.available, info.total, info.online
+    )
+}
+
+/// Check if hyper-threading is likely enabled (heuristic)
+pub fn is_hyperthreading_likely() -> bool {
+    let total = get_total_cpus();
+
+    // Common CPU core counts without HT: 1, 2, 4, 6, 8, 10, 12, 16
+    // With HT, these become: 2, 4, 8, 12, 16, 20, 24, 32
+    // This is a heuristic and may not be accurate for all systems
+
+    #[cfg(windows)]
+    {
+        // On Windows, we can try to detect logical vs physical cores
+        // This would require additional WMI queries or registry access
+        // For now, use a simple heuristic
+        total > 4 && total % 2 == 0
+    }
+
+    #[cfg(not(windows))]
+    {
+        // On Linux, check /proc/cpuinfo for siblings vs cpu cores
+        if let Ok(cpuinfo) = std::fs::read_to_string("/proc/cpuinfo") {
+            let mut siblings = 0;
+            let mut cores = 0;
+
+            for line in cpuinfo.lines() {
+                if line.starts_with("siblings") {
+                    if let Some(val) = line.split(':').nth(1) {
+                        siblings = val.trim().parse().unwrap_or(0);
+                    }
+                }
+                if line.starts_with("cpu cores") {
+                    if let Some(val) = line.split(':').nth(1) {
+                        cores = val.trim().parse().unwrap_or(0);
+                    }
+                }
+            }
+
+            return siblings > 0 && cores > 0 && siblings > cores;
+        }
+
+        // Fallback heuristic
+        total > 4 && total % 2 == 0
+    }
+}
