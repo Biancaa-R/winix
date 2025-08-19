@@ -4,14 +4,14 @@ use std::thread;
 #[cfg(windows)]
 use winapi::{
     um::{
-        processthreadsapi:{GetCurrentProcess, GetProcessAffinityMask},
+        processthreadsapi::{GetCurrentProcess, GetProcessAffinityMask},
         sysinfoapi::{GetSystemInfo, SYSTEM_INFO},
     },
     shared::minwindef::DWORD_PTR,
-};;
+};
 
 /// Configuration for nproc command
-#[derive(Debug, Default)]]
+#[derive(Debug, Default)]
 struct NprocConfig {
     show_all: bool,
     ignore_count: usize,
@@ -22,29 +22,29 @@ struct NprocConfig {
 pub struct CpuInfo {
     pub available: usize,
     pub total: usize,
-    pub online: usize
+    pub online: usize,
 }
 
 impl std::fmt::Display for CpuInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.available == self.total {
-            write!(f, "{} CPUs", self.total);
+            write!(f, "{} CPUs", self.total)
         } else {
-            write!(f, "{}/{} CPUs (available/total)", self.available, self.total);
+            write!(f, "{}/{} CPUs (available/total)", self.available, self.total)
         }
     }
 }
 
-/// Execute the nproc command to displaay number of processing units
+/// Execute the nproc command to display number of processing units
 pub fn execute(args: &[String]) {
     match parse_arguments(args) {
-        Ok(Config) => {
+        Ok(config) => {
             let count = get_processor_count(&config);
             println!("{}", count.to_string().green());
         }
         Err(e) => {
             eprintln!("{}", e.red());
-            std::process:exit(1);
+            std::process::exit(1);
         }
     }
 }
@@ -78,7 +78,7 @@ fn parse_arguments(args: &[String]) -> Result<NprocConfig, String> {
                 }
             }
             arg if arg.starts_with("--ignore=") => {
-                let value = &arg[9..];  // Skip "--ignore="
+                let value = &arg[9..]; // Skip "--ignore="
                 match value.parse::<usize>() {
                     Ok(n) => {
                         config.ignore_count = n;
@@ -91,11 +91,11 @@ fn parse_arguments(args: &[String]) -> Result<NprocConfig, String> {
             }
             "--help" => {
                 show_help();
-                std::process:exit(0);
+                std::process::exit(0);
             }
             "--version" => {
                 println!("nproc (winix) 1.0.0");
-                std::process:exit(0);
+                std::process::exit(0);
             }
             arg if arg.starts_with('-') => {
                 return Err(format!("nproc: invalid option -- '{}'", arg));
@@ -106,9 +106,10 @@ fn parse_arguments(args: &[String]) -> Result<NprocConfig, String> {
         }
     }
 
-    Ok(config);
+    Ok(config)
 }
 
+/// Get processor count based on configuration
 fn get_processor_count(config: &NprocConfig) -> usize {
     let count = if config.show_all {
         get_total_cpus()
@@ -124,6 +125,7 @@ fn get_processor_count(config: &NprocConfig) -> usize {
     }
 }
 
+/// Get number of available CPUs (considering affinity/restrictions)
 pub fn get_available_cpus() -> usize {
     // Try to get from thread::available_parallelism (most accurate for current process)
     if let Ok(parallelism) = thread::available_parallelism() {
@@ -138,19 +140,32 @@ pub fn get_available_cpus() -> usize {
 
     #[cfg(not(windows))]
     {
+        get_unix_available_cpus()
+    }
+}
+
+/// Get total number of CPUs in the system
+pub fn get_total_cpus() -> usize {
+    #[cfg(windows)]
+    {
+        get_windows_total_cpus()
+    }
+
+    #[cfg(not(windows))]
+    {
         get_unix_total_cpus()
     }
 }
 
 /// Get number of online CPUs (currently active)
 pub fn get_online_cpus() -> usize {
-    // For most systems, online CPUs equals available
+    // For most systems, online CPUs equals available CPUs
     // This could be extended to check CPU hotplug status on supported systems
     get_available_cpus()
 }
 
 #[cfg(windows)]
-fn get_windows_totala_cpus() -> {
+fn get_windows_total_cpus() -> usize {
     unsafe {
         let mut info: SYSTEM_INFO = std::mem::zeroed();
         GetSystemInfo(&mut info);
@@ -183,7 +198,7 @@ fn get_windows_available_cpus() -> usize {
 
 #[cfg(not(windows))]
 fn get_unix_total_cpus() -> usize {
-    // try to read from /proc/cpuinfo first
+    // Try to read from /proc/cpuinfo first
     if let Ok(cpuinfo) = std::fs::read_to_string("/proc/cpuinfo") {
         let count = cpuinfo
             .lines()
@@ -208,7 +223,7 @@ fn get_unix_total_cpus() -> usize {
 }
 
 #[cfg(not(windows))]
-fn get_unix_available_cpus() {
+fn get_unix_available_cpus() -> usize {
     // Check CPU affinity using sched_getaffinity on Linux
     #[cfg(target_os = "linux")]
     {
@@ -235,7 +250,7 @@ fn get_unix_available_cpus() {
     unsafe {
         let count = libc::sysconf(libc::_SC_NPROCESSORS_ONLN);
         if count > 0 {
-            return count;
+            return count as usize;
         }
     }
 
@@ -248,7 +263,7 @@ pub fn get_cpu_info() -> CpuInfo {
     CpuInfo {
         available: get_available_cpus(),
         total: get_total_cpus(),
-        online: get_online_cpus()
+        online: get_online_cpus(),
     }
 }
 
@@ -260,13 +275,13 @@ pub fn get_build_cpu_count(leave_free: usize) -> usize {
     #[cfg(unix)]
     {
         let load_adjusted = get_load_adjusted_cpu_count(available);
-        return load_adjusted.saturating_sub(leave_free).max(1)
+        return load_adjusted.saturating_sub(leave_free).max(1);
     }
 
     // On windows, just use available CPUs
-    #[cfg(unix)]
+    #[cfg(windows)]
     {
-        available.saturating_sub(leave_free).max(1);
+        available.saturating_sub(leave_free).max(1)
     }
 }
 
@@ -279,7 +294,7 @@ fn get_load_adjusted_cpu_count(available: usize) -> usize {
 
             // If load is high, reduce the number of CPUs to use
             let adjusted = (available as f64 - load_1min + 1.0).max(1.0) as usize;
-            return adjust.min(available);
+            return adjusted.min(available);
         }
     }
     available

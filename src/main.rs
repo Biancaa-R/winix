@@ -28,6 +28,7 @@ mod sudo;
 mod tui;
 mod uname;
 mod uptime;
+mod nproc;
 
 fn main() {
     let args: Vec<String> = std_env::args().collect();
@@ -186,6 +187,9 @@ fn handle_command(line: &str) {
         "env" => {
             env::execute(&args);
         }
+        "nproc" => {
+            nproc::execute(&args);
+        }
         "git" => {
             let git_args = &["status"]; // Replace with real input
             git::execute(git_args);
@@ -247,7 +251,6 @@ fn show_splash_screen() {
         "chmod".bold().yellow(),
         "chown".bold().yellow(),
         "df".bold().yellow(),
-        "env".bold().yellow(),
         "exit".bold().red(),
         "free".bold().yellow(),
         "git".bold().yellow(),
@@ -259,6 +262,7 @@ fn show_splash_screen() {
         "sensors".bold().yellow(),
         "uptime".bold().yellow(),
         "uname".bold().yellow(),
+        "env".bold().yellow(),
     );
     println!();
 }
