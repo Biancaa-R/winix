@@ -6,3 +6,8 @@ hello
 winix
 hello winix
 hello
+env
+env MY_VAR=hello echo $MY_VAR 
+cd
+ls
+cd ..
