@@ -20,6 +20,7 @@ bytes = "1.0"
 rustyline = "13.0"
 winapi = { version = "0.3", features = ["winnt", "handleapi", "processthreadsapi", "securitybaseapi", "accctrl", "aclapi", "winerror"] }
 windows-acl = "0.3"
+libc = "0.2"
 
 
 [target.'cfg(windows)'.dependencies]

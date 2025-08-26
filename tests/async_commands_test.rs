@@ -1,11 +1,11 @@
 #[cfg(test)]
 mod tests {
     use winix::{
-        cat::{cat_async_to_string, benchmark_cat_sync_vs_async},
+        cat::{benchmark_cat_sync_vs_async, cat_async_to_string},
         grep::{grep_async_to_string, grep_sync},
         head::{head_async_to_string, head_sync},
-        tail::{tail_async_to_string, tail_sync},
         pipeline::{CatGrepPipeline, CatHeadPipeline, execute_pipeline},
+        tail::{tail_async_to_string, tail_sync},
     };
 
     #[tokio::test]
@@ -15,7 +15,9 @@ mod tests {
 
         tokio::fs::write(file_path, content).await.unwrap();
 
-        let result = grep_async_to_string("hello", vec![file_path]).await.unwrap();
+        let result = grep_async_to_string("hello", vec![file_path])
+            .await
+            .unwrap();
         assert!(result.contains("hello world"));
         assert!(result.contains("hello again"));
         assert!(!result.contains("bye world"));
@@ -64,10 +66,7 @@ mod tests {
 
         tokio::fs::write(file_path, content).await.unwrap();
 
-        let pipeline = CatGrepPipeline::new(
-            vec![file_path.to_string()],
-            "hello".to_string(),
-        );
+        let pipeline = CatGrepPipeline::new(vec![file_path.to_string()], "hello".to_string());
 
         let result = execute_pipeline(pipeline).await.unwrap();
         assert!(result.contains("hello world"));
@@ -104,14 +103,16 @@ mod tests {
         tokio::fs::write(file_path, content).await.unwrap();
 
         // Benchmark cat
-        let (cat_sync_duration, cat_async_duration) = 
+        let (cat_sync_duration, cat_async_duration) =
             benchmark_cat_sync_vs_async(vec![file_path]).await;
-        
+
         println!("Cat Benchmark:");
         println!("  Sync: {:?}", cat_sync_duration);
         println!("  Async: {:?}", cat_async_duration);
-        println!("  Speedup: {:.2}x", 
-            cat_sync_duration.as_micros() as f64 / cat_async_duration.as_micros() as f64);
+        println!(
+            "  Speedup: {:.2}x",
+            cat_sync_duration.as_micros() as f64 / cat_async_duration.as_micros() as f64
+        );
 
         // Benchmark grep
         let start = std::time::Instant::now();
@@ -125,8 +126,10 @@ mod tests {
         println!("Grep Benchmark:");
         println!("  Sync: {:?}", grep_sync_duration);
         println!("  Async: {:?}", grep_async_duration);
-        println!("  Speedup: {:.2}x", 
-            grep_sync_duration.as_micros() as f64 / grep_async_duration.as_micros() as f64);
+        println!(
+            "  Speedup: {:.2}x",
+            grep_sync_duration.as_micros() as f64 / grep_async_duration.as_micros() as f64
+        );
 
         // Benchmark head
         let start = std::time::Instant::now();
@@ -140,8 +143,10 @@ mod tests {
         println!("Head Benchmark:");
         println!("  Sync: {:?}", head_sync_duration);
         println!("  Async: {:?}", head_async_duration);
-        println!("  Speedup: {:.2}x", 
-            head_sync_duration.as_micros() as f64 / head_async_duration.as_micros() as f64);
+        println!(
+            "  Speedup: {:.2}x",
+            head_sync_duration.as_micros() as f64 / head_async_duration.as_micros() as f64
+        );
 
         // Clean up
         tokio::fs::remove_file(file_path).await.unwrap();
@@ -181,9 +186,11 @@ mod tests {
         assert_eq!(result, "");
 
         // Test grep with empty file
-        let result = grep_async_to_string("pattern", vec![file_path]).await.unwrap();
+        let result = grep_async_to_string("pattern", vec![file_path])
+            .await
+            .unwrap();
         assert_eq!(result, "");
 
         tokio::fs::remove_file(file_path).await.unwrap();
     }
-} 
+}

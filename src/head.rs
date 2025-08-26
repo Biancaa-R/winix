@@ -1,9 +1,9 @@
+use bytes::Bytes;
+use futures::stream::{self, Stream, StreamExt};
 use std::io::{self, BufRead};
 use std::path::Path;
 use tokio::fs::File as TokioFile;
 use tokio::io::{AsyncBufReadExt, BufReader as TokioBufReader};
-use futures::stream::{self, Stream, StreamExt};
-use bytes::Bytes;
 
 // Sync version for benchmarking
 pub fn head_sync<S: AsRef<Path>>(files: Vec<S>, lines: usize) -> io::Result<String> {
@@ -46,36 +46,44 @@ pub async fn head_async<S: AsRef<Path> + Send + 'static>(
     }
 
     let path = files[0].as_ref().to_path_buf();
-    
+
     async move {
         match TokioFile::open(&path).await {
             Ok(file) => {
                 let reader = TokioBufReader::new(file);
                 let lines_stream = reader.lines();
-                
-                stream::unfold((lines_stream, 0, lines), |(mut lines, count, max_lines)| async move {
-                    if count >= max_lines {
-                        return None;
-                    }
-                    
-                    match lines.next_line().await {
-                        Ok(Some(line)) => {
-                            let mut normalized_line = line;
-                            // Normalize Windows-style line endings (\r\n) to Unix-style (\n)
-                            if normalized_line.ends_with('\r') {
-                                normalized_line.pop(); // Remove '\r'
-                            }
-                            normalized_line.push('\n');
-                            Some((Ok(Bytes::from(normalized_line)), (lines, count + 1, max_lines)))
+
+                stream::unfold(
+                    (lines_stream, 0, lines),
+                    |(mut lines, count, max_lines)| async move {
+                        if count >= max_lines {
+                            return None;
                         }
-                        Ok(None) => None,
-                        Err(e) => Some((Err(e), (lines, count, max_lines))),
-                    }
-                }).boxed()
+
+                        match lines.next_line().await {
+                            Ok(Some(line)) => {
+                                let mut normalized_line = line;
+                                // Normalize Windows-style line endings (\r\n) to Unix-style (\n)
+                                if normalized_line.ends_with('\r') {
+                                    normalized_line.pop(); // Remove '\r'
+                                }
+                                normalized_line.push('\n');
+                                Some((
+                                    Ok(Bytes::from(normalized_line)),
+                                    (lines, count + 1, max_lines),
+                                ))
+                            }
+                            Ok(None) => None,
+                            Err(e) => Some((Err(e), (lines, count, max_lines))),
+                        }
+                    },
+                )
+                .boxed()
             }
             Err(e) => stream::once(async move { Err(e) }).boxed(),
         }
-    }.await
+    }
+    .await
 }
 
 // Convenience function that collects the stream into a String
@@ -85,7 +93,7 @@ pub async fn head_async_to_string<S: AsRef<Path> + Send + 'static>(
 ) -> io::Result<String> {
     let mut result = String::new();
     let mut stream = head_async(files, lines).await;
-    
+
     while let Some(chunk_result) = stream.next().await {
         match chunk_result {
             Ok(bytes) => {
@@ -96,7 +104,7 @@ pub async fn head_async_to_string<S: AsRef<Path> + Send + 'static>(
             Err(e) => return Err(e),
         }
     }
-    
+
     Ok(result)
 }
 
@@ -137,4 +145,4 @@ mod tests {
 
         tokio::fs::remove_file(file_path).await.unwrap();
     }
-} 
+}

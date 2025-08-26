@@ -1,7 +1,7 @@
+use colored::*;
 use std::collections::HashMap;
 use std::env;
 use std::process::Command;
-use colored::*;
 
 /// Configuration for the env command
 #[derive(Debug, Default)]
@@ -232,7 +232,10 @@ fn apply_environment_to_command(cmd: &mut Command, config: &EnvConfig) {
 
 /// Show help information
 fn show_help() {
-    println!("{}", "env - Display and modify environment variables".bold());
+    println!(
+        "{}",
+        "env - Display and modify environment variables".bold()
+    );
     println!();
     println!("{}", "USAGE:".bold());
     println!("    env [OPTION]... [NAME=VALUE]... [COMMAND [ARG]...]");
@@ -355,7 +358,11 @@ mod tests {
         assert_eq!(config.set_vars.get("VAR"), Some(&"value".to_string()));
 
         // Test command
-        let args = vec!["VAR=value".to_string(), "echo".to_string(), "test".to_string()];
+        let args = vec![
+            "VAR=value".to_string(),
+            "echo".to_string(),
+            "test".to_string(),
+        ];
         let config = parse_arguments(&args).unwrap();
         assert_eq!(config.command_args, vec!["echo", "test"]);
 
@@ -378,7 +385,9 @@ mod tests {
     #[test]
     fn test_build_modified_environment() {
         let mut config = EnvConfig::default();
-        config.set_vars.insert("TEST_VAR".to_string(), "test_value".to_string());
+        config
+            .set_vars
+            .insert("TEST_VAR".to_string(), "test_value".to_string());
 
         let env = build_modified_environment(&config);
         assert_eq!(env.get("TEST_VAR"), Some(&"test_value".to_string()));

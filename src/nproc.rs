@@ -3,11 +3,11 @@ use std::thread;
 
 #[cfg(windows)]
 use winapi::{
+    shared::minwindef::DWORD_PTR,
     um::{
         processthreadsapi::{GetCurrentProcess, GetProcessAffinityMask},
         sysinfoapi::{GetSystemInfo, SYSTEM_INFO},
     },
-    shared::minwindef::DWORD_PTR,
 };
 
 /// Configuration for nproc command
@@ -30,7 +30,11 @@ impl std::fmt::Display for CpuInfo {
         if self.available == self.total {
             write!(f, "{} CPUs", self.total)
         } else {
-            write!(f, "{}/{} CPUs (available/total)", self.available, self.total)
+            write!(
+                f,
+                "{}/{} CPUs (available/total)",
+                self.available, self.total
+            )
         }
     }
 }
@@ -179,11 +183,7 @@ fn get_windows_available_cpus() -> usize {
         let mut process_mask: DWORD_PTR = 0;
         let mut system_mask: DWORD_PTR = 0;
 
-        if GetProcessAffinityMask(
-            GetCurrentProcess(),
-            &mut process_mask,
-            &mut system_mask,
-        ) != 0 {
+        if GetProcessAffinityMask(GetCurrentProcess(), &mut process_mask, &mut system_mask) != 0 {
             // Count the number of set bits in the process affinity mask
             let count = process_mask.count_ones() as usize;
             if count > 0 {
@@ -291,7 +291,6 @@ fn get_load_adjusted_cpu_count(available: usize) -> usize {
         let mut loadavg: [f64; 3] = [0.0; 3];
         if libc::getloadavg(loadavg.as_mut_ptr(), 3) != -1 {
             let load_1min = loadavg[0];
-
             // If load is high, reduce the number of CPUs to use
             let adjusted = (available as f64 - load_1min + 1.0).max(1.0) as usize;
             return adjusted.min(available);
@@ -301,7 +300,10 @@ fn get_load_adjusted_cpu_count(available: usize) -> usize {
 }
 
 fn show_help() {
-    println!("{}", "nproc - print the number of processing units available".bold());
+    println!(
+        "{}",
+        "nproc - print the number of processing units available".bold()
+    );
     println!();
     println!("{}", "USAGE:".bold());
     println!("    nproc [OPTION]...");
@@ -383,5 +385,166 @@ pub fn is_hyperthreading_likely() -> bool {
 
         // Fallback heuristic
         total > 4 && total % 2 == 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cpu_count_validity() {
+        let available = get_available_cpus();
+        let total = get_total_cpus();
+        let online = get_online_cpus();
+
+        // Basic sanity checks
+        assert!(available > 0, "Available CPUs should be at least 1");
+        assert!(total > 0, "Total CPUs should be at least 1");
+        assert!(online > 0, "Online CPUs should be at least 1");
+        assert!(
+            available <= total,
+            "Available CPUs should not exceed total CPUs"
+        );
+        assert!(online <= total, "Online CPUs should not exceed total CPUs");
+    }
+
+    #[test]
+    fn test_parse_arguments() {
+        // Test --all flag
+        let config = parse_arguments(&vec!["--all".to_string()]).unwrap();
+        assert!(config.show_all);
+        assert_eq!(config.ignore_count, 0);
+
+        // Test --ignore with value
+        let config = parse_arguments(&vec!["--ignore".to_string(), "2".to_string()]).unwrap();
+        assert!(!config.show_all);
+        assert_eq!(config.ignore_count, 2);
+
+        // Test --ignore=N format
+        let config = parse_arguments(&vec!["--ignore=3".to_string()]).unwrap();
+        assert_eq!(config.ignore_count, 3);
+
+        // Test combined options
+        let config = parse_arguments(&vec!["--all".to_string(), "--ignore=1".to_string()]).unwrap();
+        assert!(config.show_all);
+        assert_eq!(config.ignore_count, 1);
+
+        // Test invalid number
+        let result = parse_arguments(&vec!["--ignore".to_string(), "abc".to_string()]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid number"));
+
+        // Test missing argument
+        let result = parse_arguments(&vec!["--ignore".to_string()]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires an argument"));
+
+        // Test invalid option
+        let result = parse_arguments(&vec!["--invalid".to_string()]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid option"));
+
+        // Test extra operand
+        let result = parse_arguments(&vec!["extra".to_string()]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("extra operand"));
+    }
+
+    #[test]
+    fn test_get_processor_count() {
+        // Test normal case
+        let config = NprocConfig {
+            show_all: false,
+            ignore_count: 0,
+        };
+        let count = get_processor_count(&config);
+        assert!(count > 0);
+
+        // Test with ignore
+        let config = NprocConfig {
+            show_all: false,
+            ignore_count: 1,
+        };
+        let count = get_processor_count(&config);
+        assert!(count > 0); // Should always return at least 1
+
+        // Test with large ignore count
+        let config = NprocConfig {
+            show_all: false,
+            ignore_count: 1000,
+        };
+        let count = get_processor_count(&config);
+        assert_eq!(count, 1); // Should return minimum of 1
+
+        // Test show all
+        let config = NprocConfig {
+            show_all: true,
+            ignore_count: 0,
+        };
+        let count = get_processor_count(&config);
+        assert!(count > 0);
+    }
+
+    #[test]
+    fn test_cpu_info() {
+        let info = get_cpu_info();
+        assert!(info.available > 0);
+        assert!(info.total > 0);
+        assert!(info.online > 0);
+        assert!(info.available <= info.total);
+    }
+
+    #[test]
+    fn test_cpu_info_display() {
+        let info = CpuInfo {
+            available: 4,
+            total: 8,
+            online: 8,
+        };
+        let display = format!("{}", info);
+        assert!(display.contains("4/8"));
+
+        let info2 = CpuInfo {
+            available: 8,
+            total: 8,
+            online: 8,
+        };
+        let display2 = format!("{}", info2);
+        assert!(display2.contains("8 CPUs"));
+    }
+
+    #[test]
+    fn test_get_build_cpu_count() {
+        let count = get_build_cpu_count(0);
+        assert!(count > 0);
+
+        let count_leave_one = get_build_cpu_count(1);
+        assert!(count_leave_one > 0);
+        assert!(count_leave_one <= count);
+
+        // Test with large leave_free value
+        let count_leave_many = get_build_cpu_count(1000);
+        assert_eq!(count_leave_many, 1); // Should always return at least 1
+    }
+
+    #[test]
+    fn test_cpu_info_for_tui() {
+        let info_str = get_cpu_info_for_tui();
+        assert!(info_str.contains("Available:"));
+        assert!(info_str.contains("Total:"));
+        assert!(info_str.contains("Online:"));
+    }
+
+    #[test]
+    fn test_is_hyperthreading_likely() {
+        // Just test that it doesn't panic
+        let _ = is_hyperthreading_likely();
+    }
+
+    #[test]
+    fn test_help_display() {
+        // Ensure help doesn't panic
+        show_help();
     }
 }

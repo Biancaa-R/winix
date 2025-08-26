@@ -11,3 +11,28 @@ env MY_VAR=hello echo $MY_VAR
 cd
 ls
 cd ..
+nproc --al
+nproc --all
+nproc --ignore=2
+nproc
+exit
+hello
+cd
+ls
+cd ..
+env
+nproc
+cd ..
+hello
+nproc --version
+nproc --all
+nproc --ignore=16
+nproc --ignore=17
+nproc --ignore=-1
+env
+env cd 
+env COLOR=always ls
+ls
+env GIT_EDITOR=nano git commit\n
+env
+nproc --ignore=-1

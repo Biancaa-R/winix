@@ -20,6 +20,7 @@ mod git;
 mod input;
 #[cfg(windows)]
 mod kill;
+mod nproc;
 mod powershell;
 mod ps;
 mod rm;
@@ -28,7 +29,6 @@ mod sudo;
 mod tui;
 mod uname;
 mod uptime;
-mod nproc;
 
 fn main() {
     let args: Vec<String> = std_env::args().collect();
@@ -246,7 +246,7 @@ fn show_splash_screen() {
     println!();
     println!("{}", "Available Commands:".bold().white());
     println!(
-        "  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}",
+        "  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}\n  {}",
         "cd".bold().yellow(),
         "chmod".bold().yellow(),
         "chown".bold().yellow(),
@@ -263,6 +263,7 @@ fn show_splash_screen() {
         "uptime".bold().yellow(),
         "uname".bold().yellow(),
         "env".bold().yellow(),
+        "nproc".bold().yellow(),
     );
     println!();
 }

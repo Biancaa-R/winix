@@ -1,9 +1,9 @@
+use bytes::Bytes;
+use futures::stream::{self, Stream, StreamExt};
 use std::io::{self, BufRead};
 use std::path::Path;
 use tokio::fs::File as TokioFile;
 use tokio::io::{AsyncBufReadExt, BufReader as TokioBufReader};
-use futures::stream::{self, Stream, StreamExt};
-use bytes::Bytes;
 
 // Sync version for benchmarking
 pub fn tail_sync<S: AsRef<Path>>(files: Vec<S>, lines: usize) -> io::Result<String> {
@@ -12,7 +12,8 @@ pub fn tail_sync<S: AsRef<Path>>(files: Vec<S>, lines: usize) -> io::Result<Stri
     for file_path in files {
         let file = std::fs::File::open(&file_path)?;
         let reader = std::io::BufReader::new(file);
-        let all_lines: Vec<String> = reader.lines()
+        let all_lines: Vec<String> = reader
+            .lines()
             .map(|line| {
                 let mut line = line?;
                 // Normalize Windows-style line endings (\r\n) to Unix-style (\n)
@@ -48,17 +49,17 @@ pub async fn tail_async<S: AsRef<Path> + Send + 'static>(
     }
 
     let path = files[0].as_ref().to_path_buf();
-    
+
     async move {
         match TokioFile::open(&path).await {
             Ok(file) => {
                 let reader = TokioBufReader::new(file);
                 let lines_stream = reader.lines();
-                
+
                 // First, collect all lines to determine which ones to output
                 let mut all_lines = Vec::new();
                 let mut lines_iter = lines_stream;
-                
+
                 while let Ok(Some(line)) = lines_iter.next_line().await {
                     let mut normalized_line = line;
                     // Normalize Windows-style line endings (\r\n) to Unix-style (\n)
@@ -67,23 +68,25 @@ pub async fn tail_async<S: AsRef<Path> + Send + 'static>(
                     }
                     all_lines.push(normalized_line);
                 }
-                
+
                 let start = if all_lines.len() > lines {
                     all_lines.len() - lines
                 } else {
                     0
                 };
-                
+
                 // Create a stream from the last N lines
                 let tail_lines = all_lines[start..].to_vec();
                 stream::iter(tail_lines.into_iter().map(|line| {
                     let output = format!("{}\n", line);
                     Ok(Bytes::from(output))
-                })).boxed()
+                }))
+                .boxed()
             }
             Err(e) => stream::once(async move { Err(e) }).boxed(),
         }
-    }.await
+    }
+    .await
 }
 
 // Convenience function that collects the stream into a String
@@ -93,7 +96,7 @@ pub async fn tail_async_to_string<S: AsRef<Path> + Send + 'static>(
 ) -> io::Result<String> {
     let mut result = String::new();
     let mut stream = tail_async(files, lines).await;
-    
+
     while let Some(chunk_result) = stream.next().await {
         match chunk_result {
             Ok(bytes) => {
@@ -104,7 +107,7 @@ pub async fn tail_async_to_string<S: AsRef<Path> + Send + 'static>(
             Err(e) => return Err(e),
         }
     }
-    
+
     Ok(result)
 }
 
@@ -145,4 +148,4 @@ mod tests {
 
         tokio::fs::remove_file(file_path).await.unwrap();
     }
-} 
+}
