@@ -18,6 +18,7 @@ struct NprocConfig {
 }
 
 /// CPU information structure
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct CpuInfo {
     pub available: usize,
@@ -162,6 +163,7 @@ pub fn get_total_cpus() -> usize {
 }
 
 /// Get number of online CPUs (currently active)
+#[allow(dead_code)]
 pub fn get_online_cpus() -> usize {
     // For most systems, online CPUs equals available CPUs
     // This could be extended to check CPU hotplug status on supported systems
@@ -259,6 +261,7 @@ fn get_unix_available_cpus() -> usize {
 }
 
 /// Get comprehensive CPU information
+#[allow(dead_code)]
 pub fn get_cpu_info() -> CpuInfo {
     CpuInfo {
         available: get_available_cpus(),
@@ -268,6 +271,7 @@ pub fn get_cpu_info() -> CpuInfo {
 }
 
 /// Get CPU count for use in build systems (considers load average on Unix)
+#[allow(dead_code)]
 pub fn get_build_cpu_count(leave_free: usize) -> usize {
     let available = get_available_cpus();
 
@@ -285,6 +289,7 @@ pub fn get_build_cpu_count(leave_free: usize) -> usize {
     }
 }
 
+#[allow(dead_code)]
 #[cfg(unix)]
 fn get_load_adjusted_cpu_count(available: usize) -> usize {
     unsafe {
@@ -336,6 +341,7 @@ fn show_help() {
 }
 
 /// Get processor count for TUI display with additional info
+#[allow(dead_code)]
 pub fn get_cpu_info_for_tui() -> String {
     let info = get_cpu_info();
     format!(
@@ -345,6 +351,7 @@ pub fn get_cpu_info_for_tui() -> String {
 }
 
 /// Check if hyper-threading is likely enabled (heuristic)
+#[allow(dead_code)]
 pub fn is_hyperthreading_likely() -> bool {
     let total = get_total_cpus();
 

@@ -36,3 +36,6 @@ ls
 env GIT_EDITOR=nano git commit\n
 env
 nproc --ignore=-1
+exit
+hello
+exit
