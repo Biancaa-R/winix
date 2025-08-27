@@ -185,10 +185,16 @@ fn handle_command(line: &str) {
             }
         }
         "env" => {
-            env::execute(&args);
+            let code = env::execute(&args);
+            if code != 0 {
+                eprintln!("env exited with code {}", code);
+            }
         }
         "nproc" => {
-            nproc::execute(&args);
+            let code = nproc::execute(&args);
+            if code != 0 {
+                eprintln!("nproc exited with code {}", code);
+            }
         }
         "git" => {
             let git_args = &["status"]; // Replace with real input

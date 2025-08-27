@@ -17,6 +17,13 @@ struct NprocConfig {
     ignore_count: usize,
 }
 
+#[derive(Debug)]
+enum NprocAction {
+    Run(NprocConfig),
+    ShowHelp,
+    ShowVersion,
+}
+
 /// CPU information structure
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -41,21 +48,30 @@ impl std::fmt::Display for CpuInfo {
 }
 
 /// Execute the nproc command to display number of processing units
-pub fn execute(args: &[String]) {
+pub fn execute(args: &[String]) -> i32 {
     match parse_arguments(args) {
-        Ok(config) => {
+        Ok(NprocAction::Run(config)) => {
             let count = get_processor_count(&config);
             println!("{}", count.to_string().green());
+            0
+        }
+        Ok(NprocAction::ShowHelp) => {
+            show_help();
+            0
+        }
+        Ok(NprocAction::ShowVersion) => {
+            println!("nproc (winix) 1.0.0");
+            0
         }
         Err(e) => {
             eprintln!("{}", e.red());
-            std::process::exit(1);
+            1
         }
     }
 }
 
 /// Parse command line arguments
-fn parse_arguments(args: &[String]) -> Result<NprocConfig, String> {
+fn parse_arguments(args: &[String]) -> Result<NprocAction, String> {
     let mut config = NprocConfig::default();
     let mut i = 0;
 
@@ -95,12 +111,10 @@ fn parse_arguments(args: &[String]) -> Result<NprocConfig, String> {
                 }
             }
             "--help" => {
-                show_help();
-                std::process::exit(0);
+                return Ok(NprocAction::ShowHelp);
             }
             "--version" => {
-                println!("nproc (winix) 1.0.0");
-                std::process::exit(0);
+                return Ok(NprocAction::ShowVersion);
             }
             arg if arg.starts_with('-') => {
                 return Err(format!("nproc: invalid option -- '{}'", arg));
@@ -111,7 +125,7 @@ fn parse_arguments(args: &[String]) -> Result<NprocConfig, String> {
         }
     }
 
-    Ok(config)
+    Ok(NprocAction::Run(config))
 }
 
 /// Get processor count based on configuration
@@ -405,54 +419,68 @@ mod tests {
         let total = get_total_cpus();
         let online = get_online_cpus();
 
-        // Basic sanity checks
         assert!(available > 0, "Available CPUs should be at least 1");
         assert!(total > 0, "Total CPUs should be at least 1");
         assert!(online > 0, "Online CPUs should be at least 1");
-        assert!(
-            available <= total,
-            "Available CPUs should not exceed total CPUs"
-        );
+        assert!(available <= total, "Available CPUs should not exceed total CPUs");
         assert!(online <= total, "Online CPUs should not exceed total CPUs");
     }
 
     #[test]
     fn test_parse_arguments() {
-        // Test --all flag
-        let config = parse_arguments(&vec!["--all".to_string()]).unwrap();
-        assert!(config.show_all);
-        assert_eq!(config.ignore_count, 0);
+        // --all
+        let action = parse_arguments(&vec!["--all".to_string()]).unwrap();
+        match action {
+            NprocAction::Run(cfg) => {
+                assert!(cfg.show_all);
+                assert_eq!(cfg.ignore_count, 0);
+            }
+            _ => panic!("expected Run config for --all"),
+        }
 
-        // Test --ignore with value
-        let config = parse_arguments(&vec!["--ignore".to_string(), "2".to_string()]).unwrap();
-        assert!(!config.show_all);
-        assert_eq!(config.ignore_count, 2);
+        // --ignore <n>
+        let action = parse_arguments(&vec!["--ignore".to_string(), "2".to_string()]).unwrap();
+        match action {
+            NprocAction::Run(cfg) => {
+                assert!(!cfg.show_all);
+                assert_eq!(cfg.ignore_count, 2);
+            }
+            _ => panic!("expected Run config for --ignore 2"),
+        }
 
-        // Test --ignore=N format
-        let config = parse_arguments(&vec!["--ignore=3".to_string()]).unwrap();
-        assert_eq!(config.ignore_count, 3);
+        // --ignore=N
+        let action = parse_arguments(&vec!["--ignore=3".to_string()]).unwrap();
+        match action {
+            NprocAction::Run(cfg) => assert_eq!(cfg.ignore_count, 3),
+            _ => panic!("expected Run config for --ignore=3"),
+        }
 
-        // Test combined options
-        let config = parse_arguments(&vec!["--all".to_string(), "--ignore=1".to_string()]).unwrap();
-        assert!(config.show_all);
-        assert_eq!(config.ignore_count, 1);
+        // combined options
+        let action = parse_arguments(&vec!["--all".to_string(), "--ignore=1".to_string()]).unwrap();
+        match action {
+            NprocAction::Run(cfg) => {
+                assert!(cfg.show_all);
+                assert_eq!(cfg.ignore_count, 1);
+            }
+            _ => panic!("expected Run config for combined options"),
+        }
 
-        // Test invalid number
+        // invalid number
         let result = parse_arguments(&vec!["--ignore".to_string(), "abc".to_string()]);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("invalid number"));
 
-        // Test missing argument
+        // missing argument
         let result = parse_arguments(&vec!["--ignore".to_string()]);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("requires an argument"));
 
-        // Test invalid option
+        // invalid option
         let result = parse_arguments(&vec!["--invalid".to_string()]);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("invalid option"));
 
-        // Test extra operand
+        // extra operand
         let result = parse_arguments(&vec!["extra".to_string()]);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("extra operand"));
@@ -460,36 +488,24 @@ mod tests {
 
     #[test]
     fn test_get_processor_count() {
-        // Test normal case
-        let config = NprocConfig {
-            show_all: false,
-            ignore_count: 0,
-        };
-        let count = get_processor_count(&config);
+        // default (available)
+        let cfg = NprocConfig { show_all: false, ignore_count: 0 };
+        let count = get_processor_count(&cfg);
         assert!(count > 0);
 
-        // Test with ignore
-        let config = NprocConfig {
-            show_all: false,
-            ignore_count: 1,
-        };
-        let count = get_processor_count(&config);
-        assert!(count > 0); // Should always return at least 1
+        // ignore 1
+        let cfg = NprocConfig { show_all: false, ignore_count: 1 };
+        let count = get_processor_count(&cfg);
+        assert!(count > 0); // always at least 1
 
-        // Test with large ignore count
-        let config = NprocConfig {
-            show_all: false,
-            ignore_count: 1000,
-        };
-        let count = get_processor_count(&config);
-        assert_eq!(count, 1); // Should return minimum of 1
+        // large ignore -> clamped to 1
+        let cfg = NprocConfig { show_all: false, ignore_count: 1000 };
+        let count = get_processor_count(&cfg);
+        assert_eq!(count, 1);
 
-        // Test show all
-        let config = NprocConfig {
-            show_all: true,
-            ignore_count: 0,
-        };
-        let count = get_processor_count(&config);
+        // show all
+        let cfg = NprocConfig { show_all: true, ignore_count: 0 };
+        let count = get_processor_count(&cfg);
         assert!(count > 0);
     }
 
@@ -504,19 +520,11 @@ mod tests {
 
     #[test]
     fn test_cpu_info_display() {
-        let info = CpuInfo {
-            available: 4,
-            total: 8,
-            online: 8,
-        };
+        let info = CpuInfo { available: 4, total: 8, online: 8 };
         let display = format!("{}", info);
         assert!(display.contains("4/8"));
 
-        let info2 = CpuInfo {
-            available: 8,
-            total: 8,
-            online: 8,
-        };
+        let info2 = CpuInfo { available: 8, total: 8, online: 8 };
         let display2 = format!("{}", info2);
         assert!(display2.contains("8 CPUs"));
     }
@@ -530,9 +538,8 @@ mod tests {
         assert!(count_leave_one > 0);
         assert!(count_leave_one <= count);
 
-        // Test with large leave_free value
         let count_leave_many = get_build_cpu_count(1000);
-        assert_eq!(count_leave_many, 1); // Should always return at least 1
+        assert_eq!(count_leave_many, 1);
     }
 
     #[test]
@@ -545,13 +552,11 @@ mod tests {
 
     #[test]
     fn test_is_hyperthreading_likely() {
-        // Just test that it doesn't panic
         let _ = is_hyperthreading_likely();
     }
 
     #[test]
     fn test_help_display() {
-        // Ensure help doesn't panic
         show_help();
     }
 }

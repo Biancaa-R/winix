@@ -17,29 +17,27 @@ struct EnvConfig {
 type EnvResult<T> = Result<T, String>;
 
 /// Execute the env command with given arguments
-pub fn execute(args: &[String]) {
+pub fn execute(args: &[String]) -> i32 {
     if args.is_empty() {
         display_environment_variables();
-        return;
+        return 0;
     }
 
     match parse_arguments(args) {
         Ok(config) => {
             if !config.command_args.is_empty() {
-                run_command_with_env(&config);
+                run_command_with_env(&config)
             } else {
                 display_modified_environment(&config);
+                0
             }
         }
-        Err(e) => {
-            eprintln!("{}", e.red());
-            std::process::exit(1);
-        }
+        Err(code) => code, // just propagate the exit code
     }
 }
 
 /// Parse command line arguments into configuration
-fn parse_arguments(args: &[String]) -> EnvResult<EnvConfig> {
+fn parse_arguments(args: &[String]) -> Result<EnvConfig, i32> {
     let mut config = EnvConfig::default();
     let mut i = 0;
 
@@ -56,7 +54,8 @@ fn parse_arguments(args: &[String]) -> EnvResult<EnvConfig> {
                     config.unset_vars.push(args[i + 1].clone());
                     i += 2;
                 } else {
-                    return Err("env: option requires an argument -- 'u'".to_string());
+                    eprintln!("env: option requires an argument -- 'u'");
+                    return Err(1);
                 }
             }
             "-0" | "--null" => {
@@ -65,19 +64,23 @@ fn parse_arguments(args: &[String]) -> EnvResult<EnvConfig> {
             }
             "--help" => {
                 show_help();
-                std::process::exit(0);
+                return Err(0); // success exit
             }
             "--version" => {
                 println!("env (winix) 1.0.0");
-                std::process::exit(0);
+                return Err(0); // success exit
             }
             arg if arg.starts_with('-') && config.command_args.is_empty() => {
-                return Err(format!("env: invalid option -- '{}'", arg));
+                eprintln!("env: invalid option -- '{}'", arg);
+                return Err(1);
             }
             _ => {
                 // Check if it's a variable assignment or command
                 if arg.contains('=') && config.command_args.is_empty() {
-                    parse_variable_assignment(arg, &mut config.set_vars)?;
+                    if let Err(err) = parse_variable_assignment(arg, &mut config.set_vars) {
+                        eprintln!("{}", err);
+                        return Err(1);
+                    }
                     i += 1;
                 } else {
                     // Rest are command arguments
@@ -183,10 +186,10 @@ fn print_env_vars(vars: &[(String, String)], null_terminate: bool) {
 }
 
 /// Run a command with modified environment
-fn run_command_with_env(config: &EnvConfig) {
+fn run_command_with_env(config: &EnvConfig) -> i32 {
     if config.command_args.is_empty() {
         eprintln!("{}", "env: no command specified".red());
-        std::process::exit(1);
+        return 1;
     }
 
     let program = &config.command_args[0];
@@ -202,13 +205,14 @@ fn run_command_with_env(config: &EnvConfig) {
     match cmd.status() {
         Ok(status) => {
             if let Some(code) = status.code() {
-                std::process::exit(code);
+                code
+            } else {
+                1 // terminated by signal or unknown reason
             }
         }
-
         Err(e) => {
             eprintln!("{}", format!("env: cannot run '{}': {}", program, e).red());
-            std::process::exit(127);
+            127
         }
     }
 }

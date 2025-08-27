@@ -39,3 +39,20 @@ nproc --ignore=-1
 exit
 hello
 exit
+hello
+nproc --ignore=-1
+env GIT_EDITOR=nano git commit\n
+git add .
+env GIT_EDITOR=nano git commit\n
+git commit -m "Fix env and nproc exiting the shell"
+git commit --amend
+ env FOO=bar
+$FOO
+echo $FOO
+env
+>> env FOO=bar echo $FOO\n
+env FOO=bar echo $FOO
+>> env -i env\n
+env -i env
+env -z
+exit
