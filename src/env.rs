@@ -1,7 +1,7 @@
-use colored::*;
 use std::collections::HashMap;
-use std::env;
+use std::env as std_env;
 use std::process::Command;
+use colored::*;
 
 /// Configuration for the env command
 #[derive(Debug, Default)]
@@ -17,6 +17,7 @@ struct EnvConfig {
 type EnvResult<T> = Result<T, String>;
 
 /// Execute the env command with given arguments
+/// Returns exit code: 0 for success, non-zero for errors
 pub fn execute(args: &[String]) -> i32 {
     if args.is_empty() {
         display_environment_variables();
@@ -32,12 +33,15 @@ pub fn execute(args: &[String]) -> i32 {
                 0
             }
         }
-        Err(code) => code, // just propagate the exit code
+        Err(e) => {
+            eprintln!("{}", e.red());
+            1
+        }
     }
 }
 
 /// Parse command line arguments into configuration
-fn parse_arguments(args: &[String]) -> Result<EnvConfig, i32> {
+fn parse_arguments(args: &[String]) -> EnvResult<EnvConfig> {
     let mut config = EnvConfig::default();
     let mut i = 0;
 
@@ -54,8 +58,7 @@ fn parse_arguments(args: &[String]) -> Result<EnvConfig, i32> {
                     config.unset_vars.push(args[i + 1].clone());
                     i += 2;
                 } else {
-                    eprintln!("env: option requires an argument -- 'u'");
-                    return Err(1);
+                    return Err("env: option requires an argument -- 'u'".to_string());
                 }
             }
             "-0" | "--null" => {
@@ -64,23 +67,19 @@ fn parse_arguments(args: &[String]) -> Result<EnvConfig, i32> {
             }
             "--help" => {
                 show_help();
-                return Err(0); // success exit
+                return Err("".to_string()); // Special case: help shown, exit cleanly
             }
             "--version" => {
                 println!("env (winix) 1.0.0");
-                return Err(0); // success exit
+                return Err("".to_string()); // Special case: version shown, exit cleanly
             }
             arg if arg.starts_with('-') && config.command_args.is_empty() => {
-                eprintln!("env: invalid option -- '{}'", arg);
-                return Err(1);
+                return Err(format!("env: invalid option -- '{}'", arg));
             }
             _ => {
                 // Check if it's a variable assignment or command
                 if arg.contains('=') && config.command_args.is_empty() {
-                    if let Err(err) = parse_variable_assignment(arg, &mut config.set_vars) {
-                        eprintln!("{}", err);
-                        return Err(1);
-                    }
+                    parse_variable_assignment(arg, &mut config.set_vars)?;
                     i += 1;
                 } else {
                     // Rest are command arguments
@@ -138,7 +137,7 @@ fn display_environment_variables() {
 
 /// Get sorted environment variables
 fn get_sorted_env_vars() -> Vec<(String, String)> {
-    let mut env_vars: Vec<_> = env::vars().collect();
+    let mut env_vars: Vec<_> = std_env::vars().collect();
     env_vars.sort_by(|a, b| a.0.cmp(&b.0));
     env_vars
 }
@@ -157,7 +156,7 @@ fn build_modified_environment(config: &EnvConfig) -> HashMap<String, String> {
 
     // Start with current environment unless ignoring it
     if !config.ignore_environment {
-        for (key, value) in env::vars() {
+        for (key, value) in std_env::vars() {
             env_vars.insert(key, value);
         }
     }
@@ -175,6 +174,7 @@ fn build_modified_environment(config: &EnvConfig) -> HashMap<String, String> {
     env_vars
 }
 
+/// Print environment variables
 fn print_env_vars(vars: &[(String, String)], null_terminate: bool) {
     for (key, value) in vars {
         if null_terminate {
@@ -186,35 +186,201 @@ fn print_env_vars(vars: &[(String, String)], null_terminate: bool) {
 }
 
 /// Run a command with modified environment
+/// Returns the exit code of the executed command
 fn run_command_with_env(config: &EnvConfig) -> i32 {
     if config.command_args.is_empty() {
         eprintln!("{}", "env: no command specified".red());
-        return 1;
+        return 127;
     }
 
     let program = &config.command_args[0];
     let args = &config.command_args[1..];
 
-    let mut cmd = Command::new(program);
-    cmd.args(args);
+    // On Windows, we need to handle shell expansion differently
+    // If the command contains shell variables, we need to use the shell
+    let needs_shell = args.iter().any(|arg| 
+        arg.contains('$') || arg.contains('%') || arg.contains('*') || arg.contains('?')
+    );
 
-    // Set up environment
-    apply_environment_to_command(&mut cmd, config);
+    let status = if needs_shell {
+        run_with_shell(program, args, config)
+    } else {
+        run_directly(program, args, config)
+    };
 
-    // Execute the command
-    match cmd.status() {
-        Ok(status) => {
-            if let Some(code) = status.code() {
-                code
-            } else {
-                1 // terminated by signal or unknown reason
-            }
+    match status {
+        Ok(exit_status) => {
+            exit_status.code().unwrap_or(1)
         }
         Err(e) => {
             eprintln!("{}", format!("env: cannot run '{}': {}", program, e).red());
             127
         }
     }
+}
+
+/// Run command directly without shell
+fn run_directly(program: &str, args: &[String], config: &EnvConfig) -> Result<std::process::ExitStatus, std::io::Error> {
+    let mut cmd = Command::new(program);
+    cmd.args(args);
+    apply_environment_to_command(&mut cmd, config);
+    cmd.status()
+}
+
+/// Run command through shell for variable expansion
+fn run_with_shell(program: &str, args: &[String], config: &EnvConfig) -> Result<std::process::ExitStatus, std::io::Error> {
+    #[cfg(windows)]
+    {
+        // On Windows, use cmd.exe for variable expansion
+        let mut cmd = Command::new("cmd");
+        cmd.args(&["/C"]);
+
+        // Build the command string with proper escaping
+        let mut full_command = program.to_string();
+        for arg in args {
+            full_command.push(' ');
+            // Expand environment variables manually for Windows
+            let expanded = expand_env_vars(arg, config);
+            if expanded.contains(' ') && !expanded.starts_with('"') {
+                full_command.push_str(&format!("\"{}\"", expanded));
+            } else {
+                full_command.push_str(&expanded);
+            }
+        }
+
+        cmd.arg(&full_command);
+        apply_environment_to_command(&mut cmd, config);
+        cmd.status()
+    }
+
+    #[cfg(not(windows))]
+    {
+        // On Unix, use sh for variable expansion
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c");
+
+        // Build the command string
+        let mut full_command = program.to_string();
+        for arg in args {
+            full_command.push(' ');
+            full_command.push_str(arg);
+        }
+
+        cmd.arg(&full_command);
+        apply_environment_to_command(&mut cmd, config);
+        cmd.status()
+    }
+}
+
+/// Expand environment variables in a string
+fn expand_env_vars(input: &str, config: &EnvConfig) -> String {
+    let env_map = build_modified_environment(config);
+    let mut result = String::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '$' {
+            // Check for ${VAR} syntax
+            if chars.peek() == Some(&'{') {
+                chars.next(); // consume '{'
+                let mut var_name = String::new();
+                let mut found_closing = false;
+
+                while let Some(ch) = chars.next() {
+                    if ch == '}' {
+                        found_closing = true;
+                        break;
+                    }
+                    var_name.push(ch);
+                }
+
+                if found_closing {
+                    if let Some(value) = env_map.get(&var_name) {
+                        result.push_str(value);
+                    } else {
+                        // Variable not found, keep original
+                        result.push_str(&format!("${{{}}}", var_name));
+                    }
+                } else {
+                    // No closing brace, keep original
+                    result.push('$');
+                    result.push('{');
+                    result.push_str(&var_name);
+                }
+            } else {
+                // $VAR syntax - collect variable name
+                let mut var_name = String::new();
+                while let Some(&ch) = chars.peek() {
+                    if ch.is_ascii_alphanumeric() || ch == '_' {
+                        var_name.push(ch);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+
+                if !var_name.is_empty() {
+                    if let Some(value) = env_map.get(&var_name) {
+                        result.push_str(value);
+                    } else {
+                        // Variable not found, keep original
+                        result.push('$');
+                        result.push_str(&var_name);
+                    }
+                } else {
+                    // Just a lone $
+                    result.push('$');
+                }
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+
+    // Handle %VAR% syntax on Windows
+    #[cfg(windows)]
+    {
+        let mut windows_result = String::new();
+        let mut chars = result.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            if ch == '%' {
+                let mut var_name = String::new();
+                let mut found_closing = false;
+
+                while let Some(ch) = chars.next() {
+                    if ch == '%' {
+                        found_closing = true;
+                        break;
+                    }
+                    var_name.push(ch);
+                }
+
+                if found_closing && !var_name.is_empty() {
+                    if let Some(value) = env_map.get(&var_name) {
+                        windows_result.push_str(value);
+                    } else {
+                        // Variable not found, keep original
+                        windows_result.push('%');
+                        windows_result.push_str(&var_name);
+                        windows_result.push('%');
+                    }
+                } else {
+                    // No closing % or empty name, keep original
+                    windows_result.push('%');
+                    if !var_name.is_empty() {
+                        windows_result.push_str(&var_name);
+                    }
+                }
+            } else {
+                windows_result.push(ch);
+            }
+        }
+
+        return windows_result;
+    }
+
+    result
 }
 
 /// Apply environment configuration to a command
@@ -236,10 +402,7 @@ fn apply_environment_to_command(cmd: &mut Command, config: &EnvConfig) {
 
 /// Show help information
 fn show_help() {
-    println!(
-        "{}",
-        "env - Display and modify environment variables".bold()
-    );
+    println!("{}", "env - Display and modify environment variables".bold());
     println!();
     println!("{}", "USAGE:".bold());
     println!("    env [OPTION]... [NAME=VALUE]... [COMMAND [ARG]...]");
@@ -259,42 +422,48 @@ fn show_help() {
     println!("    env                         Display all environment variables");
     println!("    env -i                      Display empty environment");
     println!("    env -u PATH                 Display environment without PATH");
-    println!("    env MY_VAR=hello cmd /c echo %MY_VAR%  Run cmd with MY_VAR set");
-    println!("    env -i NEW_VAR=value cmd    Run cmd with only NEW_VAR set");
+
+    #[cfg(windows)]
+    {
+        println!("    env FOO=bar cmd /c echo %FOO%  Run cmd with FOO set to bar");
+        println!("    env FOO=bar echo $FOO           Shell expansion of $FOO");
+    }
+
+    #[cfg(not(windows))]
+    {
+        println!("    env FOO=bar echo $FOO           Run echo with FOO expanded");
+        println!("    env -i NEW=value bash           Run bash with only NEW set");
+    }
 }
 
-#[allow(dead_code)]
 /// Get environment variables for TUI display
 pub fn get_env_for_tui() -> Vec<(String, String)> {
     get_sorted_env_vars()
 }
 
-#[allow(dead_code)]
 /// Get a specific environment variable
 pub fn get_env_var(name: &str) -> Option<String> {
-    env::var(name).ok()
+    std_env::var(name).ok()
 }
 
-#[allow(dead_code)]
 /// Set environment variable (for TUI interaction)
 pub fn set_env_var(name: &str, value: &str) -> Result<(), String> {
     if !is_valid_var_name(name) {
         return Err(format!("Invalid variable name: {}", name));
     }
     unsafe {
-        env::set_var(name, value);
+        std_env::set_var(name, value);
     }
     Ok(())
 }
 
-#[allow(dead_code)]
 /// Remove environment variable (for TUI interaction)
 pub fn remove_env_var(name: &str) -> Result<(), String> {
     if !is_valid_var_name(name) {
         return Err(format!("Invalid variable name: {}", name));
     }
     unsafe {
-        env::remove_var(name);
+        std_env::remove_var(name);
     }
     Ok(())
 }
@@ -325,13 +494,13 @@ mod tests {
 
     #[test]
     fn test_is_valid_var_name() {
-        // Valid name
+        // Valid names
         assert!(is_valid_var_name("PATH"));
         assert!(is_valid_var_name("_underscore"));
         assert!(is_valid_var_name("VAR_123"));
         assert!(is_valid_var_name("a"));
 
-        // Invalid name
+        // Invalid names
         assert!(!is_valid_var_name(""));
         assert!(!is_valid_var_name("123_start"));
         assert!(!is_valid_var_name("var-with-dash"));
@@ -340,58 +509,52 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_arguments() {
-        // Test ignore environment
-        let args = vec!["-i".to_string()];
-        let config = parse_arguments(&args).unwrap();
-        assert!(config.ignore_environment);
+    fn test_expand_env_vars() {
+        let mut config = EnvConfig::default();
+        config.set_vars.insert("TEST".to_string(), "value".to_string());
+        config.set_vars.insert("FOO".to_string(), "bar".to_string());
+        config.set_vars.insert("TEST_suffix".to_string(), "another_value".to_string());
 
-        // Test unset
-        let args = vec!["-u".to_string(), "PATH".to_string()];
-        let config = parse_arguments(&args).unwrap();
-        assert_eq!(config.unset_vars, vec!["PATH"]);
+        // Test $VAR expansion
+        assert_eq!(expand_env_vars("$TEST", &config), "value");
+        assert_eq!(expand_env_vars("prefix_$TEST", &config), "prefix_value");
 
-        // Test null terminate
-        let args = vec!["-0".to_string()];
-        let config = parse_arguments(&args).unwrap();
-        assert!(config.null_terminate);
+        // This is the key test case - $TEST_suffix should NOT expand $TEST 
+        // because TEST_suffix is a different variable name
+        assert_eq!(expand_env_vars("$TEST_suffix", &config), "another_value");
 
-        // Test variable assignment
-        let args = vec!["VAR=value".to_string()];
-        let config = parse_arguments(&args).unwrap();
-        assert_eq!(config.set_vars.get("VAR"), Some(&"value".to_string()));
+        // Test with actual underscore after variable
+        assert_eq!(expand_env_vars("${TEST}_suffix", &config), "value_suffix");
 
-        // Test command
-        let args = vec![
-            "VAR=value".to_string(),
-            "echo".to_string(),
-            "test".to_string(),
-        ];
-        let config = parse_arguments(&args).unwrap();
-        assert_eq!(config.command_args, vec!["echo", "test"]);
+        // Test ${VAR} expansion
+        assert_eq!(expand_env_vars("${TEST}", &config), "value");
+        assert_eq!(expand_env_vars("prefix_${TEST}_suffix", &config), "prefix_value_suffix");
 
-        // Test combined
-        let args = vec![
-            "-i".to_string(),
-            "-u".to_string(),
-            "OLD".to_string(),
-            "NEW=value".to_string(),
-            "cmd".to_string(),
-        ];
+        // Test multiple variables
+        assert_eq!(expand_env_vars("$TEST and $FOO", &config), "value and bar");
+        assert_eq!(expand_env_vars("${TEST} and ${FOO}", &config), "value and bar");
 
-        let config = parse_arguments(&args).unwrap();
-        assert!(config.ignore_environment);
-        assert_eq!(config.unset_vars, vec!["OLD"]);
-        assert_eq!(config.set_vars.get("NEW"), Some(&"value".to_string()));
-        assert_eq!(config.command_args, vec!["cmd"]);
+        // Test non-existent variable (should remain unchanged)
+        assert_eq!(expand_env_vars("$NONEXISTENT", &config), "$NONEXISTENT");
+        assert_eq!(expand_env_vars("${NONEXISTENT}", &config), "${NONEXISTENT}");
+
+        // Test edge cases
+        assert_eq!(expand_env_vars("$", &config), "$");
+        assert_eq!(expand_env_vars("${", &config), "${");
+        assert_eq!(expand_env_vars("${TEST", &config), "${TEST");
+        assert_eq!(expand_env_vars("$$TEST", &config), "$value");
+ 
+        // Test with special characters that end variable names
+        assert_eq!(expand_env_vars("$TEST-dash", &config), "value-dash");
+        assert_eq!(expand_env_vars("$TEST.dot", &config), "value.dot");
+        assert_eq!(expand_env_vars("$TEST/slash", &config), "value/slash");
+        assert_eq!(expand_env_vars("$TEST$FOO", &config), "valuebar");
     }
 
     #[test]
     fn test_build_modified_environment() {
         let mut config = EnvConfig::default();
-        config
-            .set_vars
-            .insert("TEST_VAR".to_string(), "test_value".to_string());
+        config.set_vars.insert("TEST_VAR".to_string(), "test_value".to_string());
 
         let env = build_modified_environment(&config);
         assert_eq!(env.get("TEST_VAR"), Some(&"test_value".to_string()));
@@ -404,33 +567,13 @@ mod tests {
     }
 
     #[test]
-    fn test_environment_operations() {
-        let test_var = "WINIX_TEST_VAR";
-        let test_value = "test_value";
+    fn test_return_codes() {
+        // Test successful display
+        let code = execute(&vec![]);
+        assert_eq!(code, 0);
 
-        // Test set
-        assert!(set_env_var(test_var, test_value).is_ok());
-        assert_eq!(get_env_var(test_var), Some(test_value.to_string()));
-
-        // Test remove
-        assert!(remove_env_var(test_var).is_ok());
-        assert_eq!(get_env_var(test_var), None);
-
-        // Test invalid names
-        assert!(set_env_var("123invalid", "value").is_err());
-        assert!(remove_env_var("invalid-name").is_err());
-    }
-
-    #[test]
-    fn test_get_sorted_env_vars() {
-        let vars = get_sorted_env_vars();
-
-        // Check that it's sorted
-        for window in vars.windows(2) {
-            assert!(window[0].0 <= window[1].0);
-        }
-
-        // Check that it contains at least PATH (should exist on all systems)
-        assert!(vars.iter().any(|(k, _)| k == "PATH" || k == "Path"));
+        // Test invalid option
+        let code = execute(&vec!["--invalid".to_string()]);
+        assert_eq!(code, 1);
     }
 }

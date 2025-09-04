@@ -56,3 +56,41 @@ env FOO=bar echo $FOO
 env -i env
 env -z
 exit
+env FOO=bar bash -c 'echo $FOO'\n
+env FOO=bar bash -c "echo \\$FOO"\n
+env FOO=bar bash -c "echo %FOO%"\n
+env FOO=bar bash -c 'echo $FOO'\n
+./target/debug/env FOO=bar bash -c 'echo $FOO'\n
+exit
+env FOO=bar bash -c "echo \\$FOO"
+env FOO=bar bash -c "echo $FOO"
+>> env FOO=bar echo $FOO\n
+env FOO=bar echo $FOO\n
+exit
+env FOO=bar echo $FOO\n
+env FOO=gay
+echo $FOO
+echo $FOO=gay echo $FOO
+echo FOO=gay echo $FOO
+env FOO=gay echo $FOO\n
+env FOO=slr
+exit
+env Foo=FOO echo Foo
+env Foo=FOO echo $Foo
+env Foo=FOO
+env GREETING="Hello Shizain" bash -c 'echo $GREETING'
+env GREETING="Hello Shizain" echo $GREETING
+env | grep PATH\n
+env
+env FOO=bar
+echo $FOO
+env
+echo $ZSH
+echo $USER
+env -i -u HOME PATH=/tmp -C /tmp bash -c 'echo $PATH && pwd'\n
+env --help
+env -i NEW=value bash
+bash
+env NEW=value bash
+exit
+hello
