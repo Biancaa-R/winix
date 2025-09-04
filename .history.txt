@@ -94,3 +94,7 @@ bash
 env NEW=value bash
 exit
 hello
+env GREETING="Hello Shizain" bash -c 'echo $GREETING'
+exit
+env GREETING="Hello Shizain" bash -c 'echo $GREETING'
+exit

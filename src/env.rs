@@ -196,25 +196,23 @@ fn run_command_with_env(config: &EnvConfig) -> i32 {
     let program = &config.command_args[0];
     let args = &config.command_args[1..];
 
-    // On Windows, we need to handle shell expansion differently
-    // If the command contains shell variables, we need to use the shell
-    let needs_shell = args.iter().any(|arg| 
-        arg.contains('$') || arg.contains('%') || arg.contains('*') || arg.contains('?')
-    );
-
-    let status = if needs_shell {
-        run_with_shell(program, args, config)
-    } else {
-        run_directly(program, args, config)
-    };
+    // Try to run directly first
+    let status = run_directly(program, args, config);
 
     match status {
         Ok(exit_status) => {
             exit_status.code().unwrap_or(1)
         }
         Err(e) => {
-            eprintln!("{}", format!("env: cannot run '{}': {}", program, e).red());
-            127
+            // If direct execution fails, it might be a shell built-in or need shell expansion
+            // Try with shell
+            match run_with_shell(program, args, config) {
+                Ok(exit_status) => exit_status.code().unwrap_or(1),
+                Err(shell_err) => {
+                    eprintln!("{}", format!("env: cannot run '{}': {}", program, e).red());
+                    127
+                }
+            }
         }
     }
 }
@@ -227,24 +225,45 @@ fn run_directly(program: &str, args: &[String], config: &EnvConfig) -> Result<st
     cmd.status()
 }
 
-/// Run command through shell for variable expansion
+/// Run command through shell for built-in commands or when direct execution fails
 fn run_with_shell(program: &str, args: &[String], config: &EnvConfig) -> Result<std::process::ExitStatus, std::io::Error> {
     #[cfg(windows)]
     {
-        // On Windows, use cmd.exe for variable expansion
+        // On Windows, we need to be careful with command construction
+        // Check if this is a Unix-style shell (bash, sh) being invoked
+        if program == "bash" || program == "sh" || program.ends_with("/bash") || program.ends_with("/sh") {
+            // For Unix shells on Windows (e.g., Git Bash, WSL), pass arguments directly
+            let mut cmd = Command::new(program);
+            cmd.args(args);
+            apply_environment_to_command(&mut cmd, config);
+            return cmd.status();
+        }
+
+        // For Windows native commands, use cmd.exe
         let mut cmd = Command::new("cmd");
         cmd.args(&["/C"]);
 
-        // Build the command string with proper escaping
-        let mut full_command = program.to_string();
+        // Build the command string
+        let mut full_command = String::new();
+
+        // Add the program
+        if program.contains(' ') {
+            full_command.push_str(&format!("\"{}\"", program));
+        } else {
+            full_command.push_str(program);
+        }
+
+        // Add arguments
         for arg in args {
             full_command.push(' ');
-            // Expand environment variables manually for Windows
-            let expanded = expand_env_vars(arg, config);
-            if expanded.contains(' ') && !expanded.starts_with('"') {
-                full_command.push_str(&format!("\"{}\"", expanded));
+
+            // Check if the argument needs quoting
+            if arg.contains(' ') || arg.contains('"') {
+                // Escape internal quotes and wrap in quotes
+                let escaped = arg.replace('"', "\\\"");
+                full_command.push_str(&format!("\"{}\"", escaped));
             } else {
-                full_command.push_str(&expanded);
+                full_command.push_str(arg);
             }
         }
 
@@ -255,15 +274,30 @@ fn run_with_shell(program: &str, args: &[String], config: &EnvConfig) -> Result<
 
     #[cfg(not(windows))]
     {
-        // On Unix, use sh for variable expansion
+        // On Unix-like systems, use sh
         let mut cmd = Command::new("sh");
         cmd.arg("-c");
 
         // Build the command string
-        let mut full_command = program.to_string();
+        let mut full_command = String::new();
+
+        // Add the program
+        if program.contains(' ') {
+            full_command.push_str(&format!("'{}'", program.replace('\'', "'\\''")));
+        } else {
+            full_command.push_str(program);
+        }
+
+        // Add arguments
         for arg in args {
             full_command.push(' ');
-            full_command.push_str(arg);
+
+            // Properly escape single quotes for shell
+            if arg.contains('\'') || arg.contains(' ') || arg.contains('"') || arg.contains('$') {
+                full_command.push_str(&format!("'{}'", arg.replace('\'', "'\\''")));
+            } else {
+                full_command.push_str(arg);
+            }
         }
 
         cmd.arg(&full_command);
