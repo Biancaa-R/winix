@@ -3,10 +3,11 @@ use std::thread;
 
 #[cfg(windows)]
 use winapi::{
-    shared::minwindef::DWORD_PTR,
+    shared::basetsd::DWORD_PTR,
     um::{
-        processthreadsapi::{GetCurrentProcess, GetProcessAffinityMask},
+        processthreadsapi::{GetCurrentProcess},
         sysinfoapi::{GetSystemInfo, SYSTEM_INFO},
+        winbase::GetProcessAffinityMask,
     },
 };
 
