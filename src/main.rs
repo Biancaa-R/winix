@@ -4,7 +4,7 @@ use rustyline::error::ReadlineError;
 use std::env as std_env;
 use std::fs;
 use std::io::{self};
-use winix::{echo, touch};
+use winix::{echo, touch, env, nproc};
 
 mod cat;
 mod cd;
@@ -14,13 +14,11 @@ mod chmod;
 mod chown;
 mod df;
 mod disown;
-mod env;
 mod free;
 mod git;
 mod input;
 #[cfg(windows)]
 mod kill;
-mod nproc;
 mod powershell;
 mod ps;
 mod rm;

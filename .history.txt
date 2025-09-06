@@ -98,3 +98,4 @@ env GREETING="Hello Shizain" bash -c 'echo $GREETING'
 exit
 env GREETING="Hello Shizain" bash -c 'echo $GREETING'
 exit
+hello

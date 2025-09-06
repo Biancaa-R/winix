@@ -17,9 +17,9 @@ use ratatui::{
 use std::io;
 use std::time::{Duration, Instant};
 
-// Import statements for integrating with existing modules
-// Note: These are currently unused as we're implementing direct capture functions
-// use crate::{chmod, chown, df, free, ps, sensors, uname, uptime};
+// Remove the conflicting mod declarations and use imports
+// Import functions from the root-level modules instead
+use crate::{env, nproc};
 
 #[derive(Debug)]
 pub struct App {
@@ -35,6 +35,8 @@ pub struct App {
     pub command_input: String,
     pub command_output: Vec<String>,
     pub show_command_mode: bool,
+    pub env_list_state: ListState,
+    pub selected_env_var: Option<usize>,
 }
 
 impl Default for App {
@@ -54,6 +56,8 @@ impl Default for App {
             command_input: String::new(),
             command_output: Vec::new(),
             show_command_mode: false,
+            env_list_state: ListState::default(),
+            selected_env_var: None,
         };
         app.refresh_ls();
         app
@@ -105,10 +109,8 @@ impl App {
         if self.command_input.trim().is_empty() {
             return;
         }
-
         let parts: Vec<&str> = self.command_input.trim().split_whitespace().collect();
         let command = parts[0].to_lowercase();
-
         self.command_output.clear();
 
         match command.as_str() {
@@ -139,42 +141,36 @@ impl App {
                 }
             }
             "uname" => {
-                // Capture uname output directly
                 let output = capture_uname_output();
                 for line in output.lines() {
                     self.command_output.push(line.to_string());
                 }
             }
             "ps" => {
-                // Capture ps output directly
                 let output = capture_ps_output();
                 for line in output.lines() {
                     self.command_output.push(line.to_string());
                 }
             }
             "free" => {
-                // Capture free output directly
                 let output = capture_free_output();
                 for line in output.lines() {
                     self.command_output.push(line.to_string());
                 }
             }
             "df" => {
-                // Capture df output directly
                 let output = capture_df_output();
                 for line in output.lines() {
                     self.command_output.push(line.to_string());
                 }
             }
             "uptime" => {
-                // Capture uptime output directly
                 let output = capture_uptime_output();
                 for line in output.lines() {
                     self.command_output.push(line.to_string());
                 }
             }
             "sensors" => {
-                // Capture sensors output directly
                 let output = capture_sensors_output();
                 for line in output.lines() {
                     self.command_output.push(line.to_string());
@@ -243,6 +239,74 @@ impl App {
             "clear" => {
                 self.command_output.clear();
             }
+            "env" => {
+                let args: Vec<String> = if parts.len() > 1 {
+                    parts[1..].iter().map(|s| s.to_string()).collect()
+                } else {
+                    vec![]
+                };
+                let output = capture_env_output(&args);
+                for line in output.lines() {
+                    self.command_output.push(line.to_string());
+                }
+            }
+            "nproc" => {
+                let args: Vec<String> = if parts.len() > 1 {
+                    parts[1..].iter().map(|s| s.to_string()).collect()
+                } else {
+                    vec![]
+                };
+                let output = capture_nproc_output(&args);
+                for line in output.lines() {
+                    self.command_output.push(line.to_string());
+                }
+            }
+            "set" => {
+                // Set environment variable
+                if parts.len() >= 2 {
+                    let var_assignment = parts[1..].join(" ");
+                    if var_assignment.contains('=') {
+                        let var_parts: Vec<&str> = var_assignment.splitn(2, '=').collect();
+                        if var_parts.len() == 2 {
+                            let name = var_parts[0];
+                            let value = var_parts[1];
+                            match env::set_env_var(name, value) {
+                                Ok(_) => {
+                                    self.command_output.push(format!("Set {}={}", name, value));
+                                }
+                                Err(e) => {
+                                    self.command_output.push(format!("Error: {}", e));
+                                }
+                            }
+                        } else {
+                            self.command_output.push("Usage: set VAR=VALUE".to_string());
+                        }
+                    } else {
+                        self.command_output.push("Usage: set VAR=VALUE".to_string());
+                    }
+                } else {
+                    // Show all environment variables
+                    for (key, value) in std::env::vars() {
+                        self.command_output.push(format!("{}={}", key, value));
+                    }
+                }
+            }
+            "unset" => {
+                // Unset environment variable
+                if parts.len() >= 2 {
+                    let name = parts[1];
+                    match env::remove_env_var(name) {
+                        Ok(_) => {
+                            self.command_output.push(format!("Unset {}", name));
+                        }
+                        Err(e) => {
+                            self.command_output.push(format!("Error: {}", e));
+                        }
+                    }
+                } else {
+                    self.command_output.push("Usage: unset VAR".to_string());
+                }
+            }
             "help" => {
                 self.command_output.push("Available commands:".to_string());
                 self.command_output
@@ -274,6 +338,14 @@ impl App {
                 self.command_output
                     .push("  clear        - Clear output".to_string());
                 self.command_output
+                    .push("  env          - Display/set environment variables".to_string());
+                self.command_output
+                    .push("  nproc        - Display number of processors".to_string());
+                self.command_output
+                    .push("  set VAR=VAL  - Set environment variable".to_string());
+                self.command_output
+                    .push("  unset VAR    - Unset environment variable".to_string());
+                self.command_output
                     .push("  help         - Show this help".to_string());
                 self.command_output.push("".to_string());
                 self.command_output
@@ -294,7 +366,6 @@ impl App {
                 }
             }
         }
-
         self.command_input.clear();
     }
 }
@@ -907,8 +978,8 @@ fn get_memory_info() -> MemoryInfo {
 fn get_disk_info() -> Text<'static> {
     use sysinfo::Disks;
     let disks = Disks::new_with_refreshed_list();
-
     let mut info = String::new();
+
     info.push_str("Filesystem     Size      Used      Avail     Use%   Mounted on\n");
     info.push_str("─".repeat(70).as_str());
     info.push('\n');
@@ -944,7 +1015,6 @@ fn get_disk_info() -> Text<'static> {
 fn get_sensor_info() -> Text<'static> {
     use sysinfo::Components;
     let components = Components::new_with_refreshed_list();
-
     let mut info = String::new();
 
     if components.is_empty() {
@@ -966,15 +1036,12 @@ fn get_sensor_info() -> Text<'static> {
 
             if let Some(temp) = temperature {
                 info.push_str(&format!("{}: {:.1}°C", label, temp));
-
                 if let Some(max) = max_temp {
                     info.push_str(&format!(" (max: {:.1}°C)", max));
                 }
-
                 if let Some(crit) = critical_temp {
                     info.push_str(&format!(" (critical: {:.1}°C)", crit));
                 }
-
                 info.push('\n');
             }
         }
@@ -984,7 +1051,6 @@ fn get_sensor_info() -> Text<'static> {
 }
 
 // Helper functions to capture output from existing command modules
-
 fn capture_uname_output() -> String {
     // Call uname module to get actual system info
     let mut info = String::new();
@@ -1056,7 +1122,6 @@ fn capture_free_output() -> String {
 fn capture_df_output() -> String {
     use sysinfo::Disks;
     let disks = Disks::new_with_refreshed_list();
-
     let mut output = String::new();
     output.push_str("Filesystem     Size      Used      Avail     Use%   Mounted on\n");
     output.push_str("=".repeat(70).as_str());
@@ -1117,7 +1182,6 @@ fn capture_sensors_output() -> String {
     for component in &components {
         let label = component.label();
         let temperature = component.temperature();
-
         if let Some(temp) = temperature {
             output.push_str(&format!("{}: {:.1}°C\n", label, temp));
         }
@@ -1163,7 +1227,7 @@ fn capture_git_output(args: &[&str]) -> String {
     use std::process::Command;
 
     // Check if git is available
-    if !crate::git::is_git_available() {
+    if !is_command_available("git") {
         return "Error: Git is not installed or not in PATH".to_string();
     }
 
@@ -1205,15 +1269,12 @@ fn capture_powershell_output(args: &[&str]) -> String {
     use std::process::Command;
 
     // Check if PowerShell is available
-    if !crate::powershell::is_powershell_available() {
-        return "Error: PowerShell is not available on this system".to_string();
-    }
-
-    // Get the preferred PowerShell executable
     let ps_exe = if is_command_available("pwsh") {
         "pwsh"
-    } else {
+    } else if is_command_available("powershell") {
         "powershell"
+    } else {
+        return "Error: PowerShell is not available on this system".to_string();
     };
 
     let command_string = args.join(" ");
@@ -1255,16 +1316,48 @@ fn capture_powershell_output(args: &[&str]) -> String {
     }
 }
 
+// Add the missing capture functions for env and nproc
+fn capture_env_output(args: &[String]) -> String {
+    // Create a mock output by capturing the result from env::execute
+    // Since env::execute prints to stdout/stderr, we need to capture the output differently
+    if args.is_empty() {
+        // Display all environment variables
+        let mut output = String::new();
+        let mut env_vars: Vec<_> = std::env::vars().collect();
+        env_vars.sort_by(|a, b| a.0.cmp(&b.0));
+
+        for (key, value) in env_vars.iter().take(20) { // Limit to first 20 for display
+            output.push_str(&format!("{}={}\n", key, value));
+        }
+
+        if env_vars.len() > 20 {
+            output.push_str(&format!("... and {} more variables\n", env_vars.len() - 20));
+        }
+
+        output
+    } else {
+        // For other env commands, we'll just show what would happen
+        format!("env command with args: {}", args.join(" "))
+    }
+}
+
+fn capture_nproc_output(args: &[String]) -> String {
+    // Use the actual nproc implementation
+    match nproc::get_available_cpus() {
+        count if args.contains(&"--all".to_string()) => {
+            nproc::get_total_cpus().to_string()
+        }
+        count => count.to_string(),
+    }
+}
+
 fn is_command_available(cmd: &str) -> bool {
     use std::process::Command;
-    match Command::new(cmd)
-        .arg("-Command")
-        .arg("$PSVersionTable.PSVersion")
+    Command::new(cmd)
+        .arg("--version")
         .output()
-    {
-        Ok(output) => output.status.success(),
-        Err(_) => false,
-    }
+        .map(|output| output.status.success())
+        .unwrap_or(false)
 }
 
 fn render_git_info(f: &mut Frame, area: Rect) {

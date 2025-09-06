@@ -274,7 +274,16 @@ fn run_with_shell(program: &str, args: &[String], config: &EnvConfig) -> Result<
 
     #[cfg(not(windows))]
     {
-        // On Unix-like systems, use sh
+        // On Unix-like systems, if we're calling bash or sh directly with -c,
+        // we should pass the arguments as-is, not reconstruct them
+        if program == "bash" || program == "sh" || program.ends_with("/bash") || program.ends_with("/sh") {
+            let mut cmd = Command::new(program);
+            cmd.args(args);
+            apply_environment_to_command(&mut cmd, config);
+            return cmd.status();
+        }
+
+        // For other commands that need shell interpretation, use sh -c
         let mut cmd = Command::new("sh");
         cmd.arg("-c");
 
@@ -282,18 +291,23 @@ fn run_with_shell(program: &str, args: &[String], config: &EnvConfig) -> Result<
         let mut full_command = String::new();
 
         // Add the program
-        if program.contains(' ') {
+        if program.contains(' ') || program.contains('\'') {
             full_command.push_str(&format!("'{}'", program.replace('\'', "'\\''")));
         } else {
             full_command.push_str(program);
         }
 
-        // Add arguments
+        // Add arguments - be careful with quoting
         for arg in args {
             full_command.push(' ');
 
-            // Properly escape single quotes for shell
-            if arg.contains('\'') || arg.contains(' ') || arg.contains('"') || arg.contains('$') {
+            // If argument contains special characters, quote it
+            if arg.contains(' ') || arg.contains('\'') || arg.contains('"') || 
+               arg.contains('$') || arg.contains('*') || arg.contains('?') ||
+               arg.contains('&') || arg.contains('|') || arg.contains(';') ||
+               arg.contains('(') || arg.contains(')') || arg.contains('<') ||
+               arg.contains('>') || arg.contains('`') || arg.contains('\\') {
+                // Use single quotes and escape any single quotes in the argument
                 full_command.push_str(&format!("'{}'", arg.replace('\'', "'\\''")));
             } else {
                 full_command.push_str(arg);
