@@ -35,8 +35,6 @@ pub struct App {
     pub command_input: String,
     pub command_output: Vec<String>,
     pub show_command_mode: bool,
-    pub env_list_state: ListState,
-    pub selected_env_var: Option<usize>,
 }
 
 impl Default for App {
@@ -56,8 +54,6 @@ impl Default for App {
             command_input: String::new(),
             command_output: Vec::new(),
             show_command_mode: false,
-            env_list_state: ListState::default(),
-            selected_env_var: None,
         };
         app.refresh_ls();
         app
@@ -1344,7 +1340,7 @@ fn capture_env_output(args: &[String]) -> String {
 fn capture_nproc_output(args: &[String]) -> String {
     // Use the actual nproc implementation
     match nproc::get_available_cpus() {
-        count if args.contains(&"--all".to_string()) => {
+        _count if args.contains(&"--all".to_string()) => {
             nproc::get_total_cpus().to_string()
         }
         count => count.to_string(),

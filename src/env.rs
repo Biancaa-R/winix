@@ -208,7 +208,7 @@ fn run_command_with_env(config: &EnvConfig) -> i32 {
             // Try with shell
             match run_with_shell(program, args, config) {
                 Ok(exit_status) => exit_status.code().unwrap_or(1),
-                Err(shell_err) => {
+                Err(_shell_err) => {
                     eprintln!("{}", format!("env: cannot run '{}': {}", program, e).red());
                     127
                 }
@@ -320,6 +320,7 @@ fn run_with_shell(program: &str, args: &[String], config: &EnvConfig) -> Result<
     }
 }
 
+#[allow(dead_code)]
 /// Expand environment variables in a string
 fn expand_env_vars(input: &str, config: &EnvConfig) -> String {
     let env_map = build_modified_environment(config);
