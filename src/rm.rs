@@ -19,4 +19,3 @@ pub fn rm<S: AsRef<Path>>(files: Vec<S>) -> io::Result<()> {
     }
     Ok(())
 }
-

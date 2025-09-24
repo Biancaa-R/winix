@@ -1,6 +1,5 @@
-use std::fs::{File};
+use std::fs::File;
 use std::path::Path;
-
 
 #[cfg(unix)]
 use filetime::{FileTime, set_file_times};
@@ -21,15 +20,17 @@ pub fn run(args: &[String]) {
                 // Update the access and modification times
                 let now = FileTime::now();
                 if let Err(e) = set_file_times(&path, now, now) {
-                    eprintln!("touch: failed to update timestamps for '{}': {}", file_name, e);
+                    eprintln!(
+                        "touch: failed to update timestamps for '{}': {}",
+                        file_name, e
+                    );
                 } else {
                     println!("Updated timestamp for '{}'", file_name);
                 }
             }
 
             #[cfg(windows)]
-        
-            {   
+            {
                 use std::fs::OpenOptions;
                 use std::io::Write;
                 // On Windows, simulate a timestamp update by opening in append mode
@@ -38,7 +39,7 @@ pub fn run(args: &[String]) {
                         // Optionally write 0 bytes to trigger timestamp update
                         let _ = file.write(&[]);
                         println!("Simulated timestamp update for '{}'", file_name);
-                    },
+                    }
                     Err(e) => eprintln!("touch: failed to open file '{}': {}", file_name, e),
                 }
             }

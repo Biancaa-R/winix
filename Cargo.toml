@@ -18,15 +18,15 @@ tokio = { version = "1.37", features = ["full"] }
 futures = "0.3"
 bytes = "1.0"
 rustyline = "13.0"
-winapi = { version = "0.3", features = ["winnt", "handleapi", "processthreadsapi", "securitybaseapi", "accctrl", "aclapi", "winerror"] }
 windows-acl = "0.3"
-
-
-[target.'cfg(windows)'.dependencies]
+libc = "0.2"
 winapi = { version = "0.3.9", features = [
     "consoleapi",
     "processthreadsapi",
+    "sysinfoapi",
+    "basetsd",
     "handleapi",
+    "minwindef",
     "winbase",
     "errhandlingapi",
     "winnt",
@@ -42,7 +42,6 @@ winapi = { version = "0.3.9", features = [
     "winnt",
     "winbase"
 ] }
-windows-acl = "0.3.0"
 
 [dev-dependencies]
 tempfile = "3.8"

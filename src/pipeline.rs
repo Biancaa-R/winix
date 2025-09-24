@@ -1,7 +1,6 @@
 use std::future::Future;
-use std::pin::Pin;
 use std::io;
-
+use std::pin::Pin;
 
 // Pipeline command trait
 pub trait AsyncCommand {
@@ -13,7 +12,6 @@ pub trait AsyncCommand {
         input: Self::Input,
     ) -> Pin<Box<dyn Future<Output = io::Result<Self::Output>> + Send + '_>>;
 }
-
 
 // Pipeline that chains multiple commands
 pub struct Pipeline<C1, C2> {
@@ -29,7 +27,7 @@ where
     pub fn new(first: C1, second: C2) -> Self {
         Self { first, second }
     }
-    
+
     pub async fn execute(&self, input: C1::Input) -> io::Result<C2::Output> {
         let intermediate = self.first.execute(input).await?;
         self.second.execute(intermediate).await
@@ -78,7 +76,6 @@ impl AsyncCommand for CatGrepPipeline {
     }
 }
 
-
 // Example: Cat -> Head pipeline
 pub struct CatHeadPipeline {
     files: Vec<String>,
@@ -96,7 +93,6 @@ impl AsyncCommand for CatHeadPipeline {
     type Output = String;
 
     fn execute(&self, _input: ()) -> Pin<Box<dyn Future<Output = io::Result<String>> + Send + '_>> {
-
         use crate::cat::cat_async_to_string;
         use crate::head::head_async_to_string;
 
@@ -117,11 +113,8 @@ impl AsyncCommand for CatHeadPipeline {
     }
 }
 
-
 // Generic pipeline executor
-pub async fn execute_pipeline<C: AsyncCommand<Input = ()>>(
-    command: C,
-) -> io::Result<C::Output> {
+pub async fn execute_pipeline<C: AsyncCommand<Input = ()>>(command: C) -> io::Result<C::Output> {
     command.execute(()).await
 }
 
@@ -136,10 +129,7 @@ mod tests {
 
         tokio::fs::write(file_path, content).await.unwrap();
 
-        let pipeline = CatGrepPipeline::new(
-            vec![file_path.to_string()],
-            "hello".to_string(),
-        );
+        let pipeline = CatGrepPipeline::new(vec![file_path.to_string()], "hello".to_string());
 
         let result = execute_pipeline(pipeline).await.unwrap();
         assert!(result.contains("hello world"));
@@ -166,4 +156,4 @@ mod tests {
 
         tokio::fs::remove_file(file_path).await.unwrap();
     }
-} 
+}

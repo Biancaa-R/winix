@@ -1,9 +1,9 @@
-use rustyline::completion::{Completer,Pair};
+use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
-use rustyline::validate::Validator;
-use rustyline::{Editor, Config, Helper, Context, error::ReadlineError};
 use rustyline::history::DefaultHistory;
+use rustyline::validate::Validator;
+use rustyline::{Config, Context, Editor, Helper, error::ReadlineError};
 
 #[derive(Clone)]
 pub struct MyHelper;
@@ -34,10 +34,7 @@ pub struct LineEditor {
 
 impl LineEditor {
     pub fn new() -> Self {
-        let config = Config::builder()
-            .history_ignore_dups(true)
-            .unwrap()
-            .build();
+        let config = Config::builder().history_ignore_dups(true).unwrap().build();
 
         let helper = MyHelper;
         let mut rl = Editor::with_config(config).expect("Failed to create Editor");

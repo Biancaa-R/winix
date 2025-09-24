@@ -1,10 +1,10 @@
+use bytes::Bytes;
+use futures::stream::{self, Stream, StreamExt};
+use regex::Regex;
 use std::io::{self, BufRead};
 use std::path::Path;
 use tokio::fs::File as TokioFile;
 use tokio::io::{AsyncBufReadExt, BufReader as TokioBufReader};
-use futures::stream::{self, Stream, StreamExt};
-use bytes::Bytes;
-use regex::Regex;
 
 // Sync version for benchmarking
 pub fn grep_sync<S: AsRef<Path>>(pattern: &str, files: Vec<S>) -> io::Result<String> {
@@ -18,7 +18,11 @@ pub fn grep_sync<S: AsRef<Path>>(pattern: &str, files: Vec<S>) -> io::Result<Str
         for (line_num, line) in reader.lines().enumerate() {
             let line = line?;
             if regex.is_match(&line) {
-                result.push_str(&format!("{}:{}", file_path.as_ref().display(), line_num + 1));
+                result.push_str(&format!(
+                    "{}:{}",
+                    file_path.as_ref().display(),
+                    line_num + 1
+                ));
                 result.push_str(": ");
                 result.push_str(&line);
                 result.push('\n');
@@ -37,9 +41,10 @@ pub async fn grep_async<S: AsRef<Path> + Send + 'static>(
     let regex = match Regex::new(pattern) {
         Ok(re) => re,
         Err(e) => {
-            return stream::once(async move { 
-                Err(io::Error::new(io::ErrorKind::InvalidInput, e)) 
-            }).boxed();
+            return stream::once(
+                async move { Err(io::Error::new(io::ErrorKind::InvalidInput, e)) },
+            )
+            .boxed();
         }
     };
 
@@ -48,28 +53,36 @@ pub async fn grep_async<S: AsRef<Path> + Send + 'static>(
     }
 
     let path = files[0].as_ref().to_path_buf();
-    
+
     async move {
         match TokioFile::open(&path).await {
             Ok(file) => {
                 let reader = TokioBufReader::new(file);
                 let lines = reader.lines();
-                
-                stream::unfold((lines, 0, path, regex), |(mut lines, line_num, path, regex)| async move {
-                    match lines.next_line().await {
-                        Ok(Some(line)) => {
-                            if regex.is_match(&line) {
-                                let output = format!("{}:{}: {}\n", path.display(), line_num + 1, line);
-                                Some((Ok(Bytes::from(output)), (lines, line_num + 1, path, regex)))
-                            } else {
-                                // Skip non-matching lines by returning empty bytes
-                                Some((Ok(Bytes::new()), (lines, line_num + 1, path, regex)))
+
+                stream::unfold(
+                    (lines, 0, path, regex),
+                    |(mut lines, line_num, path, regex)| async move {
+                        match lines.next_line().await {
+                            Ok(Some(line)) => {
+                                if regex.is_match(&line) {
+                                    let output =
+                                        format!("{}:{}: {}\n", path.display(), line_num + 1, line);
+                                    Some((
+                                        Ok(Bytes::from(output)),
+                                        (lines, line_num + 1, path, regex),
+                                    ))
+                                } else {
+                                    // Skip non-matching lines by returning empty bytes
+                                    Some((Ok(Bytes::new()), (lines, line_num + 1, path, regex)))
+                                }
                             }
+                            Ok(None) => None,
+                            Err(e) => Some((Err(e), (lines, line_num, path, regex))),
                         }
-                        Ok(None) => None,
-                        Err(e) => Some((Err(e), (lines, line_num, path, regex))),
-                    }
-                }).filter_map(|result| async move {
+                    },
+                )
+                .filter_map(|result| async move {
                     match result {
                         Ok(bytes) => {
                             if bytes.is_empty() {
@@ -80,11 +93,13 @@ pub async fn grep_async<S: AsRef<Path> + Send + 'static>(
                         }
                         Err(e) => Some(Err(e)),
                     }
-                }).boxed()
+                })
+                .boxed()
             }
             Err(e) => stream::once(async move { Err(e) }).boxed(),
         }
-    }.await
+    }
+    .await
 }
 
 // Convenience function that collects the stream into a String
@@ -94,7 +109,7 @@ pub async fn grep_async_to_string<S: AsRef<Path> + Send + 'static>(
 ) -> io::Result<String> {
     let mut result = String::new();
     let mut stream = grep_async(pattern, files).await;
-    
+
     while let Some(chunk_result) = stream.next().await {
         match chunk_result {
             Ok(bytes) => {
@@ -105,7 +120,7 @@ pub async fn grep_async_to_string<S: AsRef<Path> + Send + 'static>(
             Err(e) => return Err(e),
         }
     }
-    
+
     Ok(result)
 }
 
@@ -134,10 +149,12 @@ mod tests {
 
         tokio::fs::write(file_path, content).await.unwrap();
 
-        let result = grep_async_to_string("hello", vec![file_path]).await.unwrap();
+        let result = grep_async_to_string("hello", vec![file_path])
+            .await
+            .unwrap();
         assert!(result.contains("hello world"));
         assert!(result.contains("hello again"));
 
         tokio::fs::remove_file(file_path).await.unwrap();
     }
-} 
+}

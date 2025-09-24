@@ -1,4 +1,4 @@
-use winix::ansi::{AnsiParser, AnsiEvent}; // Adjust based on your module path
+use winix::ansi::{AnsiEvent, AnsiParser}; // Adjust based on your module path
 
 #[test]
 fn test_ls_color_output_parses_color_events() {

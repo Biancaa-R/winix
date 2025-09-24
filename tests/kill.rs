@@ -3,11 +3,11 @@ mod tests {
     use std::process::{Command, Stdio};
     use std::thread;
     use std::time::Duration;
-    
-    use winapi::um::processthreadsapi::{GetCurrentProcessId, OpenProcess};
-    use winapi::um::winnt::{PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION};
-    use winapi::um::synchapi::WaitForSingleObject;
+
     use winapi::um::handleapi::CloseHandle;
+    use winapi::um::processthreadsapi::{GetCurrentProcessId, OpenProcess};
+    use winapi::um::synchapi::WaitForSingleObject;
+    use winapi::um::winnt::{PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION};
 
     // Helper function to create a long-running test process
     fn create_test_process() -> std::process::Child {
@@ -51,10 +51,10 @@ mod tests {
         let pid = child.id();
         println!("Started process with PID: {}", pid);
         thread::sleep(Duration::from_millis(100));
-        
+
         let running = is_process_running(pid);
         println!("Process {} running check: {}", pid, running);
-        
+
         if !running {
             // Let's try a different approach - just check that child.try_wait() returns None
             match child.try_wait() {
@@ -110,7 +110,7 @@ mod tests {
         let result = winix::kill::execute(&["-9", &pid.to_string()]);
         assert!(result.is_ok(), "Kill with signal should succeed");
         thread::sleep(Duration::from_millis(500));
-        
+
         match child.try_wait() {
             Ok(Some(_)) => assert!(true, "Process terminated with signal"),
             Ok(None) => {
@@ -157,7 +157,7 @@ mod tests {
 
         // Kill by process name (should kill only one by default)
         let result = winix::kill::execute(&["powershell"]);
-        
+
         // Note: This test will fail until process name killing is implemented
         // For now, we just check that it doesn't panic
         let _ = result;
@@ -181,7 +181,7 @@ mod tests {
 
         // Kill all processes with name using -a flag
         let result = winix::kill::execute(&["-a", "powershell"]);
-        
+
         // Note: This test will fail until process name killing is implemented
         let _ = result;
 
@@ -195,7 +195,7 @@ mod tests {
     fn test_kill_with_valid_signals() {
         let test_signals = vec![
             ("-2", "SIGINT"),
-            ("-3", "SIGQUIT"), 
+            ("-3", "SIGQUIT"),
             ("-9", "SIGKILL"),
             ("-15", "SIGTERM"),
             ("-INT", "INT signal"),
@@ -211,12 +211,17 @@ mod tests {
             thread::sleep(Duration::from_millis(100));
 
             let result = winix::kill::execute(&[signal, &pid.to_string()]);
-            
+
             // Should succeed for all valid signals
-            assert!(result.is_ok(), "Kill with {} ({}) should succeed", signal, description);
-            
+            assert!(
+                result.is_ok(),
+                "Kill with {} ({}) should succeed",
+                signal,
+                description
+            );
+
             thread::sleep(Duration::from_millis(200));
-            
+
             // Clean up if process is still running
             let _ = child.kill();
         }
@@ -239,7 +244,11 @@ mod tests {
 
         for signal in invalid_signals {
             let result = winix::kill::execute(&[signal, &pid.to_string()]);
-            assert!(result.is_err(), "Kill with invalid signal {} should fail", signal);
+            assert!(
+                result.is_err(),
+                "Kill with invalid signal {} should fail",
+                signal
+            );
         }
 
         // Clean up
@@ -273,7 +282,11 @@ mod tests {
             test_args[2] = &new_pid_str;
 
             let result = winix::kill::execute(&test_args);
-            assert!(result.is_ok(), "Kill with -s flag should succeed for args: {:?}", test_args);
+            assert!(
+                result.is_ok(),
+                "Kill with -s flag should succeed for args: {:?}",
+                test_args
+            );
 
             thread::sleep(Duration::from_millis(200));
             let _ = new_child.kill();
@@ -301,10 +314,13 @@ mod tests {
             Ok(None) => {
                 // Process is still running - this is expected for print-only mode
                 assert!(true, "Process correctly still running after -p flag");
-            },
+            }
             Ok(Some(status)) => {
-                panic!("Process unexpectedly exited with status: {:?} after print-only mode", status);
-            },
+                panic!(
+                    "Process unexpectedly exited with status: {:?} after print-only mode",
+                    status
+                );
+            }
             Err(e) => {
                 panic!("Error checking process status: {}", e);
             }
@@ -322,7 +338,7 @@ mod tests {
 
         // Test -p flag with process name
         let result = winix::kill::execute(&["-p", "powershell"]);
-        
+
         // Should succeed but not kill the process
         // Note: Will fail until process name lookup is implemented
         let _ = result;
@@ -388,7 +404,7 @@ mod tests {
 
         for _ in 0..3 {
             let child = create_test_process();
-            
+
             pids.push(child.id().to_string());
             children.push(child);
         }
@@ -421,7 +437,7 @@ mod tests {
 
         // Test --timeout option
         let result = winix::kill::execute(&["--timeout", "1000", "KILL", &pid.to_string()]);
-        
+
         // Should succeed (even if not fully implemented yet)
         assert!(result.is_ok(), "Kill with timeout should succeed");
 
@@ -453,7 +469,7 @@ mod tests {
     fn test_system_process_protection() {
         // Test protection against killing system processes
         let system_pids = vec!["0", "4", "8"]; // Common system process PIDs
-        
+
         for pid in system_pids {
             let result = winix::kill::execute(&[pid]);
             // Should either fail gracefully or be protected
@@ -466,7 +482,10 @@ mod tests {
     fn test_nonexistent_process_name() {
         // Test killing a process name that doesn't exist
         let result = winix::kill::execute(&["nonexistent_process_name_12345"]);
-        assert!(result.is_err(), "Killing nonexistent process name should fail");
+        assert!(
+            result.is_err(),
+            "Killing nonexistent process name should fail"
+        );
     }
 
     #[test]
@@ -533,7 +552,7 @@ mod tests {
 
         // Test that signal names are case-insensitive
         let signals = vec!["-term", "-TERM", "-Term", "-kill", "-KILL", "-Kill"];
-        
+
         for signal in signals {
             let mut new_child = create_test_process();
 
@@ -541,7 +560,11 @@ mod tests {
             thread::sleep(Duration::from_millis(50));
 
             let result = winix::kill::execute(&[signal, &new_pid.to_string()]);
-            assert!(result.is_ok(), "Case-insensitive signal {} should work", signal);
+            assert!(
+                result.is_ok(),
+                "Case-insensitive signal {} should work",
+                signal
+            );
 
             thread::sleep(Duration::from_millis(100));
             let _ = new_child.kill();
@@ -563,11 +586,11 @@ mod tests {
                     return false;
                 }
             }
-            
+
             let result = WaitForSingleObject(handle, 0);
             CloseHandle(handle);
             // WAIT_TIMEOUT = 0x102, means process is still running
-            result == 0x102 
+            result == 0x102
         }
     }
 }

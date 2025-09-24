@@ -1,9 +1,9 @@
 #[cfg(windows)]
+use colored::Colorize;
+#[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
 use std::{ffi::OsStr, ptr};
-#[cfg(windows)]
-use colored::Colorize;
 
 #[cfg(windows)]
 use winapi::shared::winerror::ERROR_SUCCESS;
@@ -12,23 +12,31 @@ use winapi::um::accctrl::SE_FILE_OBJECT;
 #[cfg(windows)]
 use winapi::um::aclapi::SetNamedSecurityInfoW;
 #[cfg(windows)]
-use winapi::um::winnt::*;
-#[cfg(windows)]
 use winapi::um::errhandlingapi::GetLastError;
 #[cfg(windows)]
 use winapi::um::winbase::FormatMessageW;
 #[cfg(windows)]
-use winapi::um::winbase::{FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_ALLOCATE_BUFFER, FORMAT_MESSAGE_IGNORE_INSERTS};
-#[cfg(windows)]
 use winapi::um::winbase::LocalFree;
+#[cfg(windows)]
+use winapi::um::winbase::{
+    FORMAT_MESSAGE_ALLOCATE_BUFFER, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_IGNORE_INSERTS,
+};
+#[cfg(windows)]
+use winapi::um::winnt::*;
 // no OsStringExt needed when using from_utf16_lossy
 
 /// Main entry point for chown command (only works on Windows)
 #[cfg(windows)]
 pub fn execute(args: &[&str]) {
     if args.len() < 2 {
-        println!("{}", "Usage: chown [OPTION]... [OWNER][:[GROUP]] FILE...".red());
-        println!("{}", "   or: chown [OPTION]... --reference=RFILE FILE...".red());
+        println!(
+            "{}",
+            "Usage: chown [OPTION]... [OWNER][:[GROUP]] FILE...".red()
+        );
+        println!(
+            "{}",
+            "   or: chown [OPTION]... --reference=RFILE FILE...".red()
+        );
         println!();
         println!("{}", "Examples:".yellow());
         println!("  {}", "chown alice file.txt".dimmed());
@@ -44,7 +52,14 @@ pub fn execute(args: &[&str]) {
 
     for filename in files {
         if !std::path::Path::new(filename).exists() {
-            println!("{}", format!("chown: cannot access '{}': No such file or directory", filename).red());
+            println!(
+                "{}",
+                format!(
+                    "chown: cannot access '{}': No such file or directory",
+                    filename
+                )
+                .red()
+            );
             continue;
         }
 
@@ -66,8 +81,16 @@ fn parse_and_mode(file: &str, mode: &str) -> Result<bool, String> {
         let user_part = &mode[..colon_pos];
         let group_part = &mode[colon_pos + 1..];
 
-        let user = if user_part.is_empty() { None } else { Some(user_part) };
-        let group = if group_part.is_empty() { None } else { Some(group_part) };
+        let user = if user_part.is_empty() {
+            None
+        } else {
+            Some(user_part)
+        };
+        let group = if group_part.is_empty() {
+            None
+        } else {
+            Some(group_part)
+        };
 
         (user, group)
     } else {
@@ -91,7 +114,12 @@ fn change_owner_with_only_sid(file: &str, username: &str) -> Result<(), String> 
     let user_sid = match name_to_sid(username, None) {
         Ok(sid) => sid,
         Err(0) => return Err(format!("invalid user: {}", username)),
-        Err(code) => return Err(format!("error looking up user '{}': Error code '{}'", username, code)),
+        Err(code) => {
+            return Err(format!(
+                "error looking up user '{}': Error code '{}'",
+                username, code
+            ));
+        }
     };
 
     let file_wide: Vec<u16> = OsStr::new(file)
@@ -128,7 +156,9 @@ fn get_last_error_message() -> String {
     unsafe {
         let mut buf: *mut u16 = ptr::null_mut();
         let len = FormatMessageW(
-            FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_IGNORE_INSERTS,
+            FORMAT_MESSAGE_FROM_SYSTEM
+                | FORMAT_MESSAGE_ALLOCATE_BUFFER
+                | FORMAT_MESSAGE_IGNORE_INSERTS,
             ptr::null(),
             GetLastError(),
             0,
@@ -141,8 +171,8 @@ fn get_last_error_message() -> String {
             return format!("Unknown error ({})", GetLastError());
         }
 
-    let slice = std::slice::from_raw_parts(buf, len as usize);
-    let message = String::from_utf16_lossy(slice).trim().to_string();
+        let slice = std::slice::from_raw_parts(buf, len as usize);
+        let message = String::from_utf16_lossy(slice).trim().to_string();
         LocalFree(buf as *mut _);
         message
     }
@@ -151,8 +181,8 @@ fn get_last_error_message() -> String {
 #[cfg(windows)]
 fn name_to_sid(name: &str, _domain: Option<&str>) -> Result<Vec<u8>, u32> {
     use std::mem;
-    use std::ptr::null_mut;
     use std::os::windows::ffi::OsStrExt;
+    use std::ptr::null_mut;
     use winapi::um::winbase::LookupAccountNameW;
     use winapi::um::winnt::SID_NAME_USE;
 
@@ -168,13 +198,13 @@ fn name_to_sid(name: &str, _domain: Option<&str>) -> Result<Vec<u8>, u32> {
 
         // First call to get sizes
         LookupAccountNameW(
-            null_mut(),                      // Local computer
-            name_wide.as_ptr(),              // Name to lookup
-            null_mut(),                      // SID ptr (null)
-            &mut sid_len,                    // Required size
-            null_mut(),                      // Domain buffer (null)
-            &mut domain_len,                 // Required domain size
-            &mut sid_name_use,               // SID name use
+            null_mut(),         // Local computer
+            name_wide.as_ptr(), // Name to lookup
+            null_mut(),         // SID ptr (null)
+            &mut sid_len,       // Required size
+            null_mut(),         // Domain buffer (null)
+            &mut domain_len,    // Required domain size
+            &mut sid_name_use,  // SID name use
         );
 
         let error = GetLastError();
@@ -202,7 +232,6 @@ fn name_to_sid(name: &str, _domain: Option<&str>) -> Result<Vec<u8>, u32> {
         Ok(sid_buffer)
     }
 }
-
 
 /// Dummy stub for non-Windows platforms
 #[cfg(not(windows))]

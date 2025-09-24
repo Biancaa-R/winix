@@ -1,8 +1,101 @@
 #V2
-hello
-shivam
 winix
 hello
 winix
 hello winix
 hello
+env
+env MY_VAR=hello echo $MY_VAR 
+cd
+ls
+cd ..
+nproc --al
+nproc --all
+nproc --ignore=2
+nproc
+exit
+hello
+cd
+ls
+cd ..
+env
+nproc
+cd ..
+hello
+nproc --version
+nproc --all
+nproc --ignore=16
+nproc --ignore=17
+nproc --ignore=-1
+env
+env cd 
+env COLOR=always ls
+ls
+env GIT_EDITOR=nano git commit\n
+env
+nproc --ignore=-1
+exit
+hello
+exit
+hello
+nproc --ignore=-1
+env GIT_EDITOR=nano git commit\n
+git add .
+env GIT_EDITOR=nano git commit\n
+git commit -m "Fix env and nproc exiting the shell"
+git commit --amend
+ env FOO=bar
+$FOO
+echo $FOO
+env
+>> env FOO=bar echo $FOO\n
+env FOO=bar echo $FOO
+>> env -i env\n
+env -i env
+env -z
+exit
+env FOO=bar bash -c 'echo $FOO'\n
+env FOO=bar bash -c "echo \\$FOO"\n
+env FOO=bar bash -c "echo %FOO%"\n
+env FOO=bar bash -c 'echo $FOO'\n
+./target/debug/env FOO=bar bash -c 'echo $FOO'\n
+exit
+env FOO=bar bash -c "echo \\$FOO"
+env FOO=bar bash -c "echo $FOO"
+>> env FOO=bar echo $FOO\n
+env FOO=bar echo $FOO\n
+exit
+env FOO=bar echo $FOO\n
+env FOO=gay
+echo $FOO
+echo $FOO=gay echo $FOO
+echo FOO=gay echo $FOO
+env FOO=gay echo $FOO\n
+env FOO=slr
+exit
+env Foo=FOO echo Foo
+env Foo=FOO echo $Foo
+env Foo=FOO
+env GREETING="Hello Shizain" bash -c 'echo $GREETING'
+env GREETING="Hello Shizain" echo $GREETING
+env | grep PATH\n
+env
+env FOO=bar
+echo $FOO
+env
+echo $ZSH
+echo $USER
+env -i -u HOME PATH=/tmp -C /tmp bash -c 'echo $PATH && pwd'\n
+env --help
+env -i NEW=value bash
+bash
+env NEW=value bash
+exit
+hello
+env GREETING="Hello Shizain" bash -c 'echo $GREETING'
+exit
+env GREETING="Hello Shizain" bash -c 'echo $GREETING'
+exit
+hello
+env GREETING="Hello Shizain" bash -c 'echo $GREETING'
+exit
