@@ -8,6 +8,9 @@ use winix::{echo, touch, env, nproc};
 
 mod cat;
 mod cd;
+mod mkdir;
+mod rmdir;
+mod tree;
 #[cfg(windows)]
 mod chmod;
 #[cfg(windows)]
@@ -209,6 +212,9 @@ fn handle_command(line: &str) {
         "help" => {
             show_splash_screen();
         }
+        "mkdir" =>mkdir::run(&args),
+        "rmdir" => rmdir::run(&args),
+        "tree" => tree::run(&args),
 
         _ => {
             println!("{}", format!("Unknown command: '{}'", command).red());
