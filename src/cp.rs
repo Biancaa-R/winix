@@ -21,7 +21,3 @@ pub fn run(args: &[String]) -> io::Result<()> {
     Ok(())
 }
 
-fn main() -> io::Result<()> {
-    let args: Vec<String> = env::args().skip(1).collect(); // skip program name
-    run(&args)
-}
