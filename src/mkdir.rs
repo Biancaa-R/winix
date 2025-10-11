@@ -1,11 +1,13 @@
-use std::io;
 use std::fs;
+use std::io;
 use std::path::Path;
 
+/// Run the mkdir command
+/// `args` should be the arguments passed to mkdir, e.g., ["-p", "dir1", "dir2"]
 pub fn run(args: &[String]) -> io::Result<()> {
     if args.is_empty() {
         eprintln!("mkdir: missing operand");
-        return Ok(()); // don't fail
+        return Ok(()); // Don't fail, just print message
     }
 
     let mut recursive = false;
@@ -20,11 +22,11 @@ pub fn run(args: &[String]) -> io::Result<()> {
     }
 
     for dir in dirs {
-        let path = std::path::Path::new(dir);
+        let path = Path::new(dir);
         let result = if recursive {
-            std::fs::create_dir_all(path)
+            fs::create_dir_all(path)
         } else {
-            std::fs::create_dir(path)
+            fs::create_dir(path)
         };
 
         if let Err(e) = result {

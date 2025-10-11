@@ -11,6 +11,7 @@ mod cd;
 mod mkdir;
 mod rmdir;
 mod tree;
+mod cp;
 #[cfg(windows)]
 mod chmod;
 #[cfg(windows)]
@@ -212,9 +213,22 @@ fn handle_command(line: &str) {
         "help" => {
             show_splash_screen();
         }
-        "mkdir" =>mkdir::run(&args),
-        "rmdir" => rmdir::run(&args),
-        "tree" => tree::run(&args),
+        "mkdir" =>{
+        mkdir::run(&args);
+        }
+
+    "rmdir" => {
+        rmdir::run(&args);
+    }
+
+    "tree" => {
+        tree::run(&args);
+    }
+
+    "cp" => {
+        cp::run(&args);
+    }
+
 
         _ => {
             println!("{}", format!("Unknown command: '{}'", command).red());

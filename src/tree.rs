@@ -1,28 +1,37 @@
+use std::env;
 use std::fs;
-use std::path::Path;
+use std::io;
+use std::path::{Path, PathBuf};
 
-pub fn run(args: &[String]) {
-    let root = if args.is_empty() { "." } else { &args[0] };
-    let path = Path::new(root);
+/// Print the tree structure of a directory
+fn print_tree(path: &Path, prefix: &str, is_last: bool) {
+    let file_name = path.file_name().unwrap_or_default().to_string_lossy();
 
-    if !path.exists() {
-        eprintln!("tree: '{}' does not exist", root);
-        return;
-    }
+    println!("{}{}{}", prefix, if is_last { "└── " } else { "├── " }, file_name);
 
-    print_tree(path, 0);
-}
+    if let Ok(entries) = fs::read_dir(path) {
+        let entries: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+        let count = entries.len();
 
-fn print_tree(path: &Path, depth: usize) {
-    if let Some(name) = path.file_name() {
-        println!("{}{}", " ".repeat(depth * 2), name.to_string_lossy());
-    }
-
-    if path.is_dir() {
-        if let Ok(entries) = fs::read_dir(path) {
-            for entry in entries.flatten() {
-                print_tree(&entry.path(), depth + 1);
-            }
+        for (i, entry) in entries.into_iter().enumerate() {
+            let is_last_entry = i == count - 1;
+            let new_prefix = format!("{}{}", prefix, if is_last { "    " } else { "│   " });
+            print_tree(&entry.path(), &new_prefix, is_last_entry);
         }
     }
+}
+
+/// Run the `tree` command
+/// `args` can contain optional directory path to start from
+pub fn run(args: &[String]) -> io::Result<()> {
+    let root: PathBuf = if !args.is_empty() {
+        PathBuf::from(&args[0])
+    } else {
+        env::current_dir()?
+    };
+
+    println!("{}", root.display());
+    print_tree(&root, "", true);
+
+    Ok(())
 }

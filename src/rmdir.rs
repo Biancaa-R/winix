@@ -11,8 +11,10 @@ pub fn run(args: &[String]) {
     let mut dirs = Vec::new();
 
     for arg in args {
-        if arg == "-r" {
-            recursive = true;
+        if arg.starts_with('-') {
+            if arg.contains('r') {
+                recursive = true;
+            }
         } else {
             dirs.push(arg);
         }
