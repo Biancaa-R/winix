@@ -12,6 +12,8 @@ mod mkdir;
 mod rmdir;
 mod tree;
 mod cp;
+mod traceroute;
+mod sysinfo;
 #[cfg(windows)]
 mod chmod;
 #[cfg(windows)]
@@ -214,7 +216,7 @@ fn handle_command(line: &str) {
             show_splash_screen();
         }
         "mkdir" =>{
-        mkdir::run(&args);
+            mkdir::run(&args);
         }
 
     "rmdir" => {
@@ -229,6 +231,41 @@ fn handle_command(line: &str) {
         cp::run(&args);
     }
 
+    "traceroute" =>{
+        if args.len() < 2 {
+            traceroute::print_usage(&args[0]);
+            return;
+        }
+
+        // let host = &args[1];
+        // let max_hops: u32 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(30);
+        // let probes: u32 = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(3);
+        // let timeout_ms: u64 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(2000);
+        // let start_port: u16 = args.get(5).and_then(|s| s.parse().ok()).unwrap_or(33434u16);
+        let host = &args[0];
+        let max_hops: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(30);
+        let probes: u32 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(3);
+        let timeout_ms: u64 = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(2000);
+        let start_port: u16 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(33434u16);
+
+
+        #[cfg(target_os = "windows")]
+        {
+            traceroute::windows_traceroute(host, max_hops, probes, timeout_ms);
+            return;
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            if let Err(e) = traceroute::run_traceroute_unix(host, max_hops, probes, timeout_ms, start_port) {
+                eprintln!("Traceroute failed: {}", e);
+            }
+        }
+    }
+
+    "sysinfo" =>{
+        sysinfo::run();
+    }
 
         _ => {
             println!("{}", format!("Unknown command: '{}'", command).red());
@@ -236,6 +273,7 @@ fn handle_command(line: &str) {
         }
     }
 }
+
 
 fn show_splash_screen() {
     println!(

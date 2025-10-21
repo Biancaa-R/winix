@@ -10,6 +10,14 @@ colored = "3.0.0"
 ratatui = { version = "0.29.0", features = ["all-widgets"] }
 crossterm = "0.28.1"
 sysinfo = "0.35.1"
+sys-info = "0.9"
+ping = "0.5"
+socket2 ="0.5"
+dns-lookup = "1.0"
+
+# add external crates here if needed, e.g.
+# serde = "1.0"
+
 dirs = "5.0"
 filetime = "0.2"
 regex = "1"
